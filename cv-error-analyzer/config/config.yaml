@@ -1,0 +1,24 @@
+# Main configuration with defaults list
+defaults:
+  - analysis_level: basic
+  - training_execution: epoch_constrained  
+  - iterative_improvement: default
+  - clearml: default
+  - training_validation: default
+  - _self_
+
+# Main parameters
+model_path: ???  # Required - path to trained YOLO model
+dataset_version: ???  # Required - ClearML dataset version
+
+# Global settings
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  job:
+    chdir: true
+
+# Logging configuration
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

@@ -1,0 +1,39 @@
+# @package iterative_improvement
+# Iterative improvement configuration
+
+# Iteration control
+max_global_iterations: 20
+convergence_threshold: 0.001
+improvement_window: 3
+
+# Progress tracking
+track_metrics:
+  - "percentile_75_error"
+  - "mean_total_error"
+  - "improvement_rate"
+
+# Plotting configuration
+create_plots: true
+plot_format: "png"
+plot_dpi: 150
+save_intermediate_plots: true
+
+# Automatic progression
+auto_level_progression: true
+progression_criteria:
+  min_improvement_rate: 0.05
+  saturation_iterations: 3
+  
+# Feedback loop
+enable_training_validation: true
+validation_frequency: 1  # Validate every N iterations
+
+# Saturation detection
+saturation_detection:
+  enabled: true
+  window_size: 3
+  threshold: 0.01
+  
+# Recommendation application
+apply_recommendations: true
+recommendation_confidence_threshold: 0.7
