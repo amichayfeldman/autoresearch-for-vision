@@ -6,20 +6,27 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, NewType
 
+# NewType prevents accidental mixing of raw int with trial identifiers at the type-checker level.
 TrialId = NewType("TrialId", int)
 
 
 class SearchPhase(Enum):
+    """Phase of the automated search (hyperparameter vs augmentation)."""
+
     HYPERPARAMETER = "hyperparameter"
     AUGMENTATION = "augmentation"
 
 
 class SearchMode(Enum):
+    """Strategy mode: broad exploration or exploitation of known good regions."""
+
     EXPLORE = "explore"
     EXPLOIT = "exploit"
 
 
 class TrialStatus(Enum):
+    """Outcome of a single Optuna trial."""
+
     SUCCESS = "success"
     FAILED = "failed"
     PRUNED = "pruned"
@@ -31,7 +38,7 @@ class Directive:
 
     mode: SearchMode
     target_param: str | None
-    target_range: tuple | list | None
+    target_range: tuple[float, float] | list[float] | None
     phase: SearchPhase
     reason: str
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from cv_autoresearch.types import (
@@ -21,20 +23,38 @@ def test_trial_id_is_int_newtype():
     assert tid == 42
 
 
-def test_search_phase_values():
-    assert SearchPhase.HYPERPARAMETER.value == "hyperparameter"
-    assert SearchPhase.AUGMENTATION.value == "augmentation"
+@pytest.mark.parametrize(
+    "member, expected",
+    [
+        (SearchPhase.HYPERPARAMETER, "hyperparameter"),
+        (SearchPhase.AUGMENTATION, "augmentation"),
+    ],
+)
+def test_search_phase_values(member: SearchPhase, expected: str):
+    assert member.value == expected
 
 
-def test_search_mode_values():
-    assert SearchMode.EXPLORE.value == "explore"
-    assert SearchMode.EXPLOIT.value == "exploit"
+@pytest.mark.parametrize(
+    "member, expected",
+    [
+        (SearchMode.EXPLORE, "explore"),
+        (SearchMode.EXPLOIT, "exploit"),
+    ],
+)
+def test_search_mode_values(member: SearchMode, expected: str):
+    assert member.value == expected
 
 
-def test_trial_status_values():
-    assert TrialStatus.SUCCESS.value == "success"
-    assert TrialStatus.FAILED.value == "failed"
-    assert TrialStatus.PRUNED.value == "pruned"
+@pytest.mark.parametrize(
+    "member, expected",
+    [
+        (TrialStatus.SUCCESS, "success"),
+        (TrialStatus.FAILED, "failed"),
+        (TrialStatus.PRUNED, "pruned"),
+    ],
+)
+def test_trial_status_values(member: TrialStatus, expected: str):
+    assert member.value == expected
 
 
 def test_directive_is_frozen():
@@ -45,7 +65,7 @@ def test_directive_is_frozen():
         phase=SearchPhase.HYPERPARAMETER,
         reason="Initial exploration",
     )
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         directive.mode = SearchMode.EXPLOIT  # type: ignore[misc]
 
 
@@ -126,7 +146,7 @@ def test_iteration_result_is_frozen():
         error_message=None,
         directive=directive,
     )
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         result.improved = False  # type: ignore[misc]
 
 

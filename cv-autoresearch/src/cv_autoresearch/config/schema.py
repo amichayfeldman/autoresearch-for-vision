@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -18,8 +19,9 @@ class SearchConfig:
     exploit_trials_per_directive: int = 5
     optuna_storage: str = "sqlite:///autoresearch.db"
     optuna_seed: int = 42
-    hp_overrides: dict = field(default_factory=dict)
-    aug_overrides: dict = field(default_factory=dict)
+    hp_overrides: dict[str, Any] = field(default_factory=dict)
+    aug_overrides: dict[str, Any] = field(default_factory=dict)
+    # Accepts "cuda", "cpu", or "mps"; defaults to "cuda" for GPU-first training.
     device: str = "cuda"
     num_workers: int = 4
     checkpoint_dir: str = "./checkpoints"
