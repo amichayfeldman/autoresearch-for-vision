@@ -18,8 +18,7 @@ from cv_autoresearch.config.schema import SearchConfig
         ("optuna_seed", 42),
         ("device", "cuda"),
         ("num_workers", 4),
-        ("checkpoint_dir", "./checkpoints"),
-        ("metric_config_path", "config/metrics/generated.yaml"),
+        ("output_dir", "./autoresearch_output"),
     ],
 )
 def test_search_config_defaults(field_name: str, expected_value: object):
@@ -29,6 +28,27 @@ def test_search_config_defaults(field_name: str, expected_value: object):
         higher_is_better=True,
     )
     assert getattr(cfg, field_name) == expected_value
+
+
+@pytest.mark.parametrize(
+    "output_dir, prop, expected",
+    [
+        ("./out", "checkpoint_dir", "out/checkpoints"),
+        ("./out", "metric_config_path", "out/config/metrics/generated.yaml"),
+        ("./out", "log_path", "out/autoresearch.jsonl"),
+        ("./out", "plot_path", "out/improvement_curve.png"),
+        ("/abs/path", "checkpoint_dir", "/abs/path/checkpoints"),
+        ("/abs/path", "log_path", "/abs/path/autoresearch.jsonl"),
+    ],
+)
+def test_derived_paths(output_dir: str, prop: str, expected: str):
+    cfg = SearchConfig(
+        task_description="task",
+        primary_metric="val_acc",
+        higher_is_better=True,
+        output_dir=output_dir,
+    )
+    assert getattr(cfg, prop) == expected
 
 
 def test_required_task_description():

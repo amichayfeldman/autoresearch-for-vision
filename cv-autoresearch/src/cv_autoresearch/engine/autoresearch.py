@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from typing import Any
 
 from pytorch_lightning import LightningModule, Trainer
@@ -17,6 +18,8 @@ from cv_autoresearch.engine.evaluator import (
     instantiate_metric,
     run_val_inference,
 )
+from cv_autoresearch.engine.logger import RunLogger
+from cv_autoresearch.engine.plotting import plot_improvement_curve
 from cv_autoresearch.engine.reporting import generate_summary
 from cv_autoresearch.lightning.datamodule import AutoResearchDataModule
 from cv_autoresearch.lightning.module import AutoResearchModule
@@ -64,115 +67,150 @@ def run_autoresearch(
     hooks = vlm_hooks or VLMHooks()
     history = SearchHistory()
 
-    # Startup: generate metric config via Claude (once)
-    metric_cfg = generate_metric_config(
-        config.task_description,
+    # Ensure output directory tree exists
+    Path(config.output_dir).mkdir(parents=True, exist_ok=True)
+
+    with RunLogger(config.log_path) as logger:
+        logger.log_run_start(
+            config.task_description,
+            config.primary_metric,
+            config.higher_is_better,
+            config.hp_trials,
+            config.aug_trials,
+        )
+
+        # Startup: generate metric config via Claude (once)
+        metric_cfg = generate_metric_config(
+            config.task_description,
+            config.primary_metric,
+            config.metric_config_path,
+        )
+        metric = instantiate_metric(metric_cfg)
+
+        # Run initial baseline (default config, no augmentation)
+        baseline = _run_initial_baseline(
+            user_module, train_dataset, val_dataset, metric, config, logger
+        )
+
+        hp_study = create_study(
+            name=f"{config.primary_metric}_hp",
+            direction="maximize" if config.higher_is_better else "minimize",
+            storage=config.optuna_storage,
+            seed=config.optuna_seed,
+        )
+
+        # Phase 1: Hyperparameter search
+        hp_budget = config.hp_trials
+        trial_counter = 0
+
+        while trial_counter < hp_budget:
+            directive = get_next_directive(
+                config.task_description, history, baseline, SearchPhase.HYPERPARAMETER, config
+            )
+
+            if directive.mode == SearchMode.EXPLOIT and directive.target_param:
+                param_range = list(directive.target_range or [0.0, 1.0])
+                results = run_exploit_phase(
+                    hp_study,
+                    lambda cfg: _run_trial(
+                        cfg, baseline.augmentation_config, user_module, train_dataset,
+                        val_dataset, metric, config, history, baseline, directive,
+                        SearchPhase.HYPERPARAMETER, hooks, logger,
+                    ),
+                    history,
+                    baseline.hyperparams,
+                    directive.target_param,
+                    param_range,
+                    config.exploit_trials_per_directive,
+                )
+                trial_counter += len(results)
+                baseline = _refresh_baseline(history, baseline, config.higher_is_better)
+            else:
+                run_explore_trial(
+                    hp_study,
+                    lambda cfg: _run_trial(
+                        cfg, baseline.augmentation_config, user_module, train_dataset,
+                        val_dataset, metric, config, history, baseline, directive,
+                        SearchPhase.HYPERPARAMETER, hooks, logger,
+                    ),
+                    history,
+                    lambda trial: suggest_hyperparams(trial, config.hp_overrides),
+                )
+                trial_counter += 1
+                baseline = _refresh_baseline(history, baseline, config.higher_is_better)
+
+        hp_trial_count = trial_counter
+        hooks.analyze_phase(SearchPhase.HYPERPARAMETER, hp_study, baseline)
+        logger.log_phase_end(
+            SearchPhase.HYPERPARAMETER,
+            baseline.primary_metric_value,
+            sum(1 for e in history.entries if e.phase == SearchPhase.HYPERPARAMETER),
+        )
+
+        aug_study = create_study(
+            name=f"{config.primary_metric}_aug",
+            direction="maximize" if config.higher_is_better else "minimize",
+            storage=config.optuna_storage,
+            seed=config.optuna_seed,
+        )
+
+        # Phase 2: Augmentation search (hyperparams fixed to best)
+        aug_budget = config.aug_trials
+        aug_counter = 0
+
+        while aug_counter < aug_budget:
+            directive = get_next_directive(
+                config.task_description, history, baseline, SearchPhase.AUGMENTATION, config
+            )
+
+            if directive.mode == SearchMode.EXPLOIT and directive.target_param:
+                param_range = list(directive.target_range or [0.0, 1.0])
+                results = run_exploit_phase(
+                    aug_study,
+                    lambda cfg: _run_trial(
+                        baseline.hyperparams, cfg, user_module, train_dataset,
+                        val_dataset, metric, config, history, baseline, directive,
+                        SearchPhase.AUGMENTATION, hooks, logger,
+                    ),
+                    history,
+                    baseline.augmentation_config,
+                    directive.target_param,
+                    param_range,
+                    config.exploit_trials_per_directive,
+                )
+                aug_counter += len(results)
+                baseline = _refresh_baseline(history, baseline, config.higher_is_better)
+            else:
+                run_explore_trial(
+                    aug_study,
+                    lambda cfg: _run_trial(
+                        baseline.hyperparams, cfg, user_module, train_dataset,
+                        val_dataset, metric, config, history, baseline, directive,
+                        SearchPhase.AUGMENTATION, hooks, logger,
+                    ),
+                    history,
+                    lambda trial: suggest_augmentations(trial, config.aug_overrides),
+                )
+                aug_counter += 1
+                baseline = _refresh_baseline(history, baseline, config.higher_is_better)
+
+        hooks.analyze_phase(SearchPhase.AUGMENTATION, aug_study, baseline)
+        hooks.analyze_experiment(history, baseline)
+        logger.log_phase_end(
+            SearchPhase.AUGMENTATION,
+            baseline.primary_metric_value,
+            sum(1 for e in history.entries if e.phase == SearchPhase.AUGMENTATION),
+        )
+        logger.log_run_end(baseline, len(history.entries))
+
+    # Generate improvement plot after logger is closed
+    plot_improvement_curve(
+        history,
         config.primary_metric,
-        config.metric_config_path,
+        config.higher_is_better,
+        config.plot_path,
+        hp_trial_count,
     )
-    metric = instantiate_metric(metric_cfg)
-
-    # Run initial baseline (default config, no augmentation)
-    baseline = _run_initial_baseline(user_module, train_dataset, val_dataset, metric, config)
-
-    hp_study = create_study(
-        name=f"{config.primary_metric}_hp",
-        direction="maximize" if config.higher_is_better else "minimize",
-        storage=config.optuna_storage,
-        seed=config.optuna_seed,
-    )
-
-    # Phase 1: Hyperparameter search
-    hp_budget = config.hp_trials
-    trial_counter = 0
-
-    while trial_counter < hp_budget:
-        directive = get_next_directive(
-            config.task_description, history, baseline, SearchPhase.HYPERPARAMETER, config
-        )
-
-        if directive.mode == SearchMode.EXPLOIT and directive.target_param:
-            param_range = list(directive.target_range or [0.0, 1.0])
-            results = run_exploit_phase(
-                hp_study,
-                lambda cfg: _run_trial(
-                    cfg, baseline.augmentation_config, user_module, train_dataset,
-                    val_dataset, metric, config, history, baseline, directive,
-                    SearchPhase.HYPERPARAMETER, hooks,
-                ),
-                history,
-                baseline.hyperparams,
-                directive.target_param,
-                param_range,
-                config.exploit_trials_per_directive,
-            )
-            trial_counter += len(results)
-            baseline = _refresh_baseline(history, baseline, config.higher_is_better)
-        else:
-            run_explore_trial(
-                hp_study,
-                lambda cfg: _run_trial(
-                    cfg, baseline.augmentation_config, user_module, train_dataset,
-                    val_dataset, metric, config, history, baseline, directive,
-                    SearchPhase.HYPERPARAMETER, hooks,
-                ),
-                history,
-                lambda trial: suggest_hyperparams(trial, config.hp_overrides),
-            )
-            trial_counter += 1
-            baseline = _refresh_baseline(history, baseline, config.higher_is_better)
-
-    hooks.analyze_phase(SearchPhase.HYPERPARAMETER, hp_study, baseline)
-
-    aug_study = create_study(
-        name=f"{config.primary_metric}_aug",
-        direction="maximize" if config.higher_is_better else "minimize",
-        storage=config.optuna_storage,
-        seed=config.optuna_seed,
-    )
-
-    # Phase 2: Augmentation search (hyperparams fixed to best)
-    aug_budget = config.aug_trials
-    aug_counter = 0
-
-    while aug_counter < aug_budget:
-        directive = get_next_directive(
-            config.task_description, history, baseline, SearchPhase.AUGMENTATION, config
-        )
-
-        if directive.mode == SearchMode.EXPLOIT and directive.target_param:
-            param_range = list(directive.target_range or [0.0, 1.0])
-            results = run_exploit_phase(
-                aug_study,
-                lambda cfg: _run_trial(
-                    baseline.hyperparams, cfg, user_module, train_dataset,
-                    val_dataset, metric, config, history, baseline, directive,
-                    SearchPhase.AUGMENTATION, hooks,
-                ),
-                history,
-                baseline.augmentation_config,
-                directive.target_param,
-                param_range,
-                config.exploit_trials_per_directive,
-            )
-            aug_counter += len(results)
-            baseline = _refresh_baseline(history, baseline, config.higher_is_better)
-        else:
-            run_explore_trial(
-                aug_study,
-                lambda cfg: _run_trial(
-                    baseline.hyperparams, cfg, user_module, train_dataset,
-                    val_dataset, metric, config, history, baseline, directive,
-                    SearchPhase.AUGMENTATION, hooks,
-                ),
-                history,
-                lambda trial: suggest_augmentations(trial, config.aug_overrides),
-            )
-            aug_counter += 1
-            baseline = _refresh_baseline(history, baseline, config.higher_is_better)
-
-    hooks.analyze_phase(SearchPhase.AUGMENTATION, aug_study, baseline)
-    hooks.analyze_experiment(history, baseline)
 
     return generate_summary(baseline, history, config)
 
@@ -183,6 +221,7 @@ def _run_initial_baseline(
     val_dataset: Dataset,
     metric: Any,
     config: SearchConfig,
+    logger: RunLogger,
 ) -> Baseline:
     """Train with default hyperparams and compute initial baseline metric.
 
@@ -231,6 +270,7 @@ def _run_trial(
     directive: Directive,
     phase: SearchPhase,
     hooks: VLMHooks,
+    logger: RunLogger,
 ) -> float:
     """Execute one trial: train + evaluate, record result, call hooks.
 
@@ -277,6 +317,7 @@ def _run_trial(
             error_message=None,
         )
         history.record(entry)
+        logger.log_trial(entry)
         hooks.analyze_iteration(entry, history, baseline)
         return value
     except Exception as exc:  # noqa: BLE001
@@ -295,6 +336,7 @@ def _run_trial(
             error_message=str(exc),
         )
         history.record(entry)
+        logger.log_trial(entry)
         hooks.analyze_iteration(entry, history, baseline)
         return worst
 
