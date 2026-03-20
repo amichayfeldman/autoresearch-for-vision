@@ -12,7 +12,6 @@ from cv_autoresearch.search.history import HistoryEntry, SearchHistory
 from cv_autoresearch.types import (
     Directive,
     SearchMode,
-    SearchPhase,
     TrialId,
     TrialStatus,
 )
@@ -23,16 +22,14 @@ from cv_autoresearch.types import (
 
 _DIRECTIVE = Directive(
     mode=SearchMode.EXPLORE,
-    target_param=None,
+    target_param="learning_rate",
     target_range=None,
-    phase=SearchPhase.HYPERPARAMETER,
     reason="test",
 )
 
 
 def _make_entry(
     trial_id: int,
-    phase: SearchPhase = SearchPhase.HYPERPARAMETER,
     param_name: str | None = None,
     param_value: Any = None,
     metric_after: float | None = None,
@@ -41,7 +38,6 @@ def _make_entry(
 ) -> HistoryEntry:
     return HistoryEntry(
         trial_id=TrialId(trial_id),
-        phase=phase,
         mode=SearchMode.EXPLORE,
         directive=_DIRECTIVE,
         param_name=param_name,
@@ -85,21 +81,19 @@ def test_make_label_hp_integer_value() -> None:
 def test_make_label_aug_enabled() -> None:
     entry = _make_entry(
         trial_id=1,
-        phase=SearchPhase.AUGMENTATION,
-        param_name="horizontal_flip",
-        param_value={"p": 0.5},
+        param_name="HorizontalFlip_enabled",
+        param_value=0.8,
     )
-    assert _make_label(entry) == "horizontal_flip enabled"
+    assert _make_label(entry) == "HorizontalFlip_enabled=0.8"
 
 
 def test_make_label_aug_disabled() -> None:
     entry = _make_entry(
         trial_id=1,
-        phase=SearchPhase.AUGMENTATION,
-        param_name="horizontal_flip",
-        param_value=None,
+        param_name="HorizontalFlip_enabled",
+        param_value=0.2,
     )
-    assert _make_label(entry) == "horizontal_flip disabled"
+    assert _make_label(entry) == "HorizontalFlip_enabled=0.2"
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +191,7 @@ def test_plot_improvement_curve_creates_file(tmp_path: Path) -> None:
         history.entries.append(_make_entry(i, metric_after=val, improved=imp))
 
     output = tmp_path / "curve.png"
-    plot_improvement_curve(history, "val_loss", False, str(output), hp_trial_count=2)
+    plot_improvement_curve(history, "val_loss", False, str(output))
     assert output.exists()
     assert output.stat().st_size > 0
 
@@ -209,7 +203,7 @@ def test_plot_improvement_curve_empty_history_no_crash(tmp_path: Path) -> None:
     history = SearchHistory()
     output = tmp_path / "curve.png"
     # Empty history should return silently without creating a file
-    plot_improvement_curve(history, "val_acc", True, str(output), hp_trial_count=0)
+    plot_improvement_curve(history, "val_acc", True, str(output))
     assert not output.exists()
 
 
@@ -224,7 +218,7 @@ def test_plot_improvement_curve_higher_is_better_title(tmp_path: Path) -> None:
     history = SearchHistory()
     history.entries.append(_make_entry(0, metric_after=0.8, improved=True))
     output = tmp_path / "curve.png"
-    plot_improvement_curve(history, "accuracy", True, str(output), hp_trial_count=1)
+    plot_improvement_curve(history, "accuracy", True, str(output))
     # File created successfully with higher_is_better=True
     assert output.exists()
 
@@ -236,5 +230,5 @@ def test_plot_improvement_curve_lower_is_better_title(tmp_path: Path) -> None:
     history = SearchHistory()
     history.entries.append(_make_entry(0, metric_after=0.3, improved=True))
     output = tmp_path / "curve.png"
-    plot_improvement_curve(history, "val_loss", False, str(output), hp_trial_count=1)
+    plot_improvement_curve(history, "val_loss", False, str(output))
     assert output.exists()

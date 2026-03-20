@@ -11,7 +11,6 @@ from cv_autoresearch.types import (
     Directive,
     IterationResult,
     SearchMode,
-    SearchPhase,
     TrialId,
     TrialStatus,
 )
@@ -21,17 +20,6 @@ def test_trial_id_is_int_newtype():
     tid = TrialId(42)
     assert isinstance(tid, int)
     assert tid == 42
-
-
-@pytest.mark.parametrize(
-    "member, expected",
-    [
-        (SearchPhase.HYPERPARAMETER, "hyperparameter"),
-        (SearchPhase.AUGMENTATION, "augmentation"),
-    ],
-)
-def test_search_phase_values(member: SearchPhase, expected: str):
-    assert member.value == expected
 
 
 @pytest.mark.parametrize(
@@ -60,9 +48,8 @@ def test_trial_status_values(member: TrialStatus, expected: str):
 def test_directive_is_frozen():
     directive = Directive(
         mode=SearchMode.EXPLORE,
-        target_param="lr",
+        target_param="learning_rate",
         target_range=(1e-4, 1e-2),
-        phase=SearchPhase.HYPERPARAMETER,
         reason="Initial exploration",
     )
     with pytest.raises(dataclasses.FrozenInstanceError):
@@ -72,27 +59,23 @@ def test_directive_is_frozen():
 def test_directive_all_fields():
     directive = Directive(
         mode=SearchMode.EXPLOIT,
-        target_param="dropout",
+        target_param="dropout_rate",
         target_range=[0.1, 0.5],
-        phase=SearchPhase.AUGMENTATION,
         reason="Exploiting known good region",
     )
     assert directive.mode == SearchMode.EXPLOIT
-    assert directive.target_param == "dropout"
+    assert directive.target_param == "dropout_rate"
     assert directive.target_range == [0.1, 0.5]
-    assert directive.phase == SearchPhase.AUGMENTATION
     assert directive.reason == "Exploiting known good region"
 
 
-def test_directive_target_param_none():
+def test_directive_target_range_none():
     directive = Directive(
         mode=SearchMode.EXPLORE,
-        target_param=None,
+        target_param="learning_rate",
         target_range=None,
-        phase=SearchPhase.HYPERPARAMETER,
-        reason="Broad search",
+        reason="Broad search using default range",
     )
-    assert directive.target_param is None
     assert directive.target_range is None
 
 
@@ -128,14 +111,12 @@ def test_baseline_with_trial_id():
 def test_iteration_result_is_frozen():
     directive = Directive(
         mode=SearchMode.EXPLORE,
-        target_param=None,
+        target_param="learning_rate",
         target_range=None,
-        phase=SearchPhase.HYPERPARAMETER,
         reason="test",
     )
     result = IterationResult(
         trial_id=TrialId(1),
-        phase=SearchPhase.HYPERPARAMETER,
         mode=SearchMode.EXPLORE,
         status=TrialStatus.SUCCESS,
         metrics={"val_acc": 0.88},
@@ -153,14 +134,12 @@ def test_iteration_result_is_frozen():
 def test_iteration_result_all_fields():
     directive = Directive(
         mode=SearchMode.EXPLOIT,
-        target_param="lr",
-        target_range=(1e-4, 1e-2),
-        phase=SearchPhase.HYPERPARAMETER,
+        target_param="learning_rate",
+        target_range=[1e-4, 1e-2],
         reason="exploit lr",
     )
     result = IterationResult(
         trial_id=TrialId(3),
-        phase=SearchPhase.HYPERPARAMETER,
         mode=SearchMode.EXPLOIT,
         status=TrialStatus.PRUNED,
         metrics={"val_loss": 0.5},

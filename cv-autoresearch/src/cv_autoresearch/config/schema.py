@@ -23,8 +23,7 @@ class SearchConfig:
     task_description: str
     primary_metric: str
     higher_is_better: bool
-    hp_trials: int = 50
-    aug_trials: int = 30
+    total_trials: int = 80
     epochs_per_trial: int = 10
     exploit_trials_per_directive: int = 5
     optuna_storage: str = "sqlite:///autoresearch.db"

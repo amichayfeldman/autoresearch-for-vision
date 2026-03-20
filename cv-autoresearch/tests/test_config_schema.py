@@ -10,8 +10,7 @@ from cv_autoresearch.config.schema import SearchConfig
 @pytest.mark.parametrize(
     "field_name, expected_value",
     [
-        ("hp_trials", 50),
-        ("aug_trials", 30),
+        ("total_trials", 80),
         ("epochs_per_trial", 10),
         ("exploit_trials_per_directive", 5),
         ("optuna_storage", "sqlite:///autoresearch.db"),
@@ -119,15 +118,13 @@ def test_custom_values():
         task_description="segment tumors",
         primary_metric="val_dice",
         higher_is_better=True,
-        hp_trials=100,
-        aug_trials=60,
+        total_trials=120,
         epochs_per_trial=5,
         device="cpu",
     )
     assert cfg.task_description == "segment tumors"
     assert cfg.primary_metric == "val_dice"
     assert cfg.higher_is_better is True
-    assert cfg.hp_trials == 100
-    assert cfg.aug_trials == 60
+    assert cfg.total_trials == 120
     assert cfg.epochs_per_trial == 5
     assert cfg.device == "cpu"

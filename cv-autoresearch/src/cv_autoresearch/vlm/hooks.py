@@ -40,7 +40,7 @@ class VLMHooks:
         """Called after each search phase completes. No-op in base class.
 
         Args:
-            phase: SearchPhase that just completed.
+            phase: Phase identifier that just completed.
             study: Optuna Study for the phase.
             baseline: Current Baseline.
         """
@@ -91,7 +91,7 @@ class AsyncVLMHooks(VLMHooks):
         """Schedule phase analysis coroutine non-blocking.
 
         Args:
-            phase: SearchPhase that just completed.
+            phase: Phase identifier that just completed.
             study: Optuna Study for the phase.
             baseline: Current Baseline.
         """

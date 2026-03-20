@@ -10,13 +10,6 @@ from typing import Any, NewType
 TrialId = NewType("TrialId", int)
 
 
-class SearchPhase(Enum):
-    """Phase of the automated search (hyperparameter vs augmentation)."""
-
-    HYPERPARAMETER = "hyperparameter"
-    AUGMENTATION = "augmentation"
-
-
 class SearchMode(Enum):
     """Strategy mode: broad exploration or exploitation of known good regions."""
 
@@ -37,9 +30,8 @@ class Directive:
     """Decision returned by Claude at each iteration."""
 
     mode: SearchMode
-    target_param: str | None
-    target_range: tuple[float, float] | list[float] | None
-    phase: SearchPhase
+    target_param: str
+    target_range: list[float] | None
     reason: str
 
 
@@ -58,7 +50,6 @@ class IterationResult:
     """Result of a single trial iteration."""
 
     trial_id: TrialId
-    phase: SearchPhase
     mode: SearchMode
     status: TrialStatus
     metrics: dict[str, float]

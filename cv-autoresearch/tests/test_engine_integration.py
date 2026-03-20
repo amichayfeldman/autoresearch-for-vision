@@ -15,7 +15,7 @@ from cv_autoresearch.engine.autoresearch import run_autoresearch
 from cv_autoresearch.engine.baseline import should_update_baseline, update_baseline
 from cv_autoresearch.engine.reporting import generate_summary
 from cv_autoresearch.search.history import HistoryEntry, SearchHistory
-from cv_autoresearch.types import Baseline, Directive, SearchMode, SearchPhase, TrialId, TrialStatus
+from cv_autoresearch.types import Baseline, Directive, SearchMode, TrialId, TrialStatus
 
 
 # ---------------------------------------------------------------------------
@@ -60,8 +60,7 @@ def tiny_config() -> SearchConfig:
         task_description="Binary classification test",
         primary_metric="accuracy",
         higher_is_better=True,
-        hp_trials=2,
-        aug_trials=2,
+        total_trials=4,
         epochs_per_trial=1,
         exploit_trials_per_directive=1,
         optuna_storage="sqlite:///test_autoresearch.db",
@@ -74,9 +73,8 @@ def tiny_config() -> SearchConfig:
 def fake_directive() -> Directive:
     return Directive(
         mode=SearchMode.EXPLORE,
-        target_param=None,
+        target_param="learning_rate",
         target_range=None,
-        phase=SearchPhase.HYPERPARAMETER,
         reason="Test directive",
     )
 
@@ -117,16 +115,14 @@ def _make_entry(
     trial_id: int,
     delta: float,
     status: TrialStatus,
-    phase: SearchPhase = SearchPhase.HYPERPARAMETER,
     directive: Directive | None = None,
 ) -> HistoryEntry:
     if directive is None:
-        directive = Directive(SearchMode.EXPLORE, None, None, phase, "test")
+        directive = Directive(SearchMode.EXPLORE, "learning_rate", None, "test")
     before = 0.5
     after = before + delta if status != TrialStatus.FAILED else None
     return HistoryEntry(
         trial_id=TrialId(trial_id),
-        phase=phase,
         mode=SearchMode.EXPLORE,
         directive=directive,
         param_name=None,
@@ -157,7 +153,7 @@ def test_generate_summary_contains_required_keys() -> None:
     assert "total_trials" in result
     assert result["total_trials"] == 2
     assert "top_improvements" in result
-    assert "phase_breakdown" in result
+    assert "failed_trials" in result
 
 
 def test_generate_summary_failed_trials_counted() -> None:
@@ -169,7 +165,7 @@ def test_generate_summary_failed_trials_counted() -> None:
 
     result = generate_summary(baseline, history, config)
 
-    assert result["phase_breakdown"]["failed_trials"] == 1
+    assert result["failed_trials"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -200,10 +196,9 @@ def test_run_autoresearch_returns_summary_keys(tiny_config: SearchConfig) -> Non
         # Mock training always returns a fixed metric
         mock_train.return_value = mock_metric_value
 
-        # Mock Claude returning EXPLORE directive
+        # Mock Claude returning EXPLORE directive with a known param
         mock_claude.return_value = (
-            "MODE: EXPLORE\nPARAM: NONE\nRANGE: NONE\n"
-            "PHASE: hyperparameter\nREASON: Exploring."
+            "MODE: EXPLORE\nPARAM: learning_rate\nRANGE: NONE\nREASON: Exploring."
         )
 
         result = run_autoresearch(model, train_ds, val_ds, tiny_config)
@@ -212,7 +207,7 @@ def test_run_autoresearch_returns_summary_keys(tiny_config: SearchConfig) -> Non
     assert "best_hyperparams" in result
     assert "best_augmentations" in result
     assert "total_trials" in result
-    assert "phase_breakdown" in result
+    assert "failed_trials" in result
 
 
 def test_run_autoresearch_failed_trial_does_not_update_baseline(
@@ -244,12 +239,11 @@ def test_run_autoresearch_failed_trial_does_not_update_baseline(
         mock_gen.return_value = MagicMock()
         mock_inst.return_value = MagicMock()
         mock_claude.return_value = (
-            "MODE: EXPLORE\nPARAM: NONE\nRANGE: NONE\n"
-            "PHASE: hyperparameter\nREASON: Exploring."
+            "MODE: EXPLORE\nPARAM: learning_rate\nRANGE: NONE\nREASON: Exploring."
         )
 
         result = run_autoresearch(model, train_ds, val_ds, tiny_config)
 
     # Some trials should be FAILED
-    assert "phase_breakdown" in result
-    assert result["phase_breakdown"]["failed_trials"] >= 1
+    assert "failed_trials" in result
+    assert result["failed_trials"] >= 1

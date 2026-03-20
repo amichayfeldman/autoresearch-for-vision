@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from cv_autoresearch.search.history import HistoryEntry, SearchHistory
-from cv_autoresearch.types import SearchPhase, TrialStatus
+from cv_autoresearch.types import TrialStatus
 
 
 def plot_improvement_curve(
@@ -14,21 +13,17 @@ def plot_improvement_curve(
     primary_metric: str,
     higher_is_better: bool,
     output_path: str,
-    hp_trial_count: int,
 ) -> None:
     """Generate and save the improvement curve plot.
 
     Draws a running-best metric line across all trials, with coloured
-    markers and annotations only at improvement points.  A vertical
-    dashed line separates the hyperparameter and augmentation phases.
+    markers and annotations only at improvement points.
 
     Args:
         history: Completed SearchHistory containing all trial entries.
         primary_metric: Name of the metric (used as Y-axis label).
         higher_is_better: Optimization direction.
         output_path: File path to write the PNG (parent dirs created).
-        hp_trial_count: Number of hyperparameter trials, used to draw
-            the phase-boundary vertical line.
     """
     try:
         import matplotlib
@@ -70,11 +65,6 @@ def plot_improvement_curve(
                 color="#1565C0",
                 arrowprops=dict(arrowstyle="-", color="#90CAF9", lw=0.8),
             )
-
-    # Phase boundary
-    if hp_trial_count > 0 and hp_trial_count < len(trial_ids):
-        ax.axvline(x=hp_trial_count - 0.5, color="#E53935", linewidth=1,
-                   linestyle="--", alpha=0.7, label="HP → Augmentation phase")
 
     direction = "higher is better" if higher_is_better else "lower is better"
     ax.set_xlabel("Trial", fontsize=10)
@@ -148,13 +138,6 @@ def _make_label(entry: HistoryEntry) -> str:
     name = entry.param_name
     value = entry.param_value
 
-    if entry.phase == SearchPhase.AUGMENTATION:
-        # Augmentation: show transform name + enabled/disabled
-        if value is None:
-            return f"{name} disabled"
-        return f"{name} enabled"
-
-    # Hyperparameter: show param=value
     if isinstance(value, float):
         return f"{name}={value:.4g}"
     return f"{name}={value}"

@@ -62,8 +62,8 @@ def test_run_command_writes_output_json(runner: CliRunner, tmp_path) -> None:
         "best_hyperparams": {"lr": 1e-3},
         "best_augmentations": {},
         "total_trials": 4,
+        "failed_trials": 0,
         "top_improvements": [],
-        "phase_breakdown": {"hyperparameter_trials": 2, "augmentation_trials": 2, "failed_trials": 0},
     }
 
     with (
@@ -141,8 +141,8 @@ def test_resume_command_calls_run_autoresearch(runner: CliRunner) -> None:
         "best_hyperparams": {},
         "best_augmentations": {},
         "total_trials": 2,
+        "failed_trials": 0,
         "top_improvements": [],
-        "phase_breakdown": {"hyperparameter_trials": 1, "augmentation_trials": 1, "failed_trials": 0},
     }
 
     with (

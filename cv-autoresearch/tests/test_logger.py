@@ -14,7 +14,6 @@ from cv_autoresearch.types import (
     Baseline,
     Directive,
     SearchMode,
-    SearchPhase,
     TrialId,
     TrialStatus,
 )
@@ -25,16 +24,14 @@ from cv_autoresearch.types import (
 
 _DIRECTIVE = Directive(
     mode=SearchMode.EXPLORE,
-    target_param=None,
+    target_param="learning_rate",
     target_range=None,
-    phase=SearchPhase.HYPERPARAMETER,
     reason="test",
 )
 
 
 def _make_entry(
     trial_id: int = 0,
-    phase: SearchPhase = SearchPhase.HYPERPARAMETER,
     mode: SearchMode = SearchMode.EXPLORE,
     param_name: str | None = "learning_rate",
     param_value: Any = 1e-3,
@@ -46,7 +43,6 @@ def _make_entry(
 ) -> HistoryEntry:
     return HistoryEntry(
         trial_id=TrialId(trial_id),
-        phase=phase,
         mode=mode,
         directive=_DIRECTIVE,
         param_name=param_name,
@@ -100,7 +96,7 @@ def test_run_logger_creates_parent_dirs(tmp_path: Path) -> None:
 def test_log_run_start_writes_correct_event(tmp_path: Path) -> None:
     log_path = tmp_path / "run.jsonl"
     with RunLogger(str(log_path)) as logger:
-        logger.log_run_start("classify cats", "val_acc", True, 30, 20)
+        logger.log_run_start("classify cats", "val_acc", True, 50)
 
     records = _read_jsonl(log_path)
     assert len(records) == 1
@@ -109,8 +105,7 @@ def test_log_run_start_writes_correct_event(tmp_path: Path) -> None:
     assert rec["task"] == "classify cats"
     assert rec["metric"] == "val_acc"
     assert rec["higher_is_better"] is True
-    assert rec["hp_trials"] == 30
-    assert rec["aug_trials"] == 20
+    assert rec["total_trials"] == 50
     assert "ts" in rec
 
 
@@ -130,7 +125,7 @@ def test_log_trial_success_writes_correct_fields(tmp_path: Path) -> None:
     rec = records[0]
     assert rec["event"] == "trial"
     assert rec["trial_id"] == 1
-    assert rec["phase"] == "hyperparameter"
+    assert "phase" not in rec
     assert rec["mode"] == "explore"
     assert rec["status"] == "success"
     assert rec["metric_before"] == pytest.approx(0.5)
@@ -169,33 +164,6 @@ def test_log_trial_delta_present(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# log_phase_end
-# ---------------------------------------------------------------------------
-
-
-def test_log_phase_end_writes_correct_event(tmp_path: Path) -> None:
-    log_path = tmp_path / "run.jsonl"
-    with RunLogger(str(log_path)) as logger:
-        logger.log_phase_end(SearchPhase.HYPERPARAMETER, 0.75, 12)
-
-    records = _read_jsonl(log_path)
-    rec = records[0]
-    assert rec["event"] == "phase_end"
-    assert rec["phase"] == "hyperparameter"
-    assert rec["best_metric"] == pytest.approx(0.75)
-    assert rec["trials_in_phase"] == 12
-
-
-def test_log_phase_end_augmentation(tmp_path: Path) -> None:
-    log_path = tmp_path / "run.jsonl"
-    with RunLogger(str(log_path)) as logger:
-        logger.log_phase_end(SearchPhase.AUGMENTATION, 0.82, 8)
-
-    records = _read_jsonl(log_path)
-    assert records[0]["phase"] == "augmentation"
-
-
-# ---------------------------------------------------------------------------
 # log_run_end
 # ---------------------------------------------------------------------------
 
@@ -226,16 +194,14 @@ def test_full_run_event_sequence(tmp_path: Path) -> None:
     baseline = _make_baseline(0.8)
 
     with RunLogger(str(log_path)) as logger:
-        logger.log_run_start("task", "val_acc", True, 10, 5)
+        logger.log_run_start("task", "val_acc", True, 10)
         logger.log_trial(entry)
-        logger.log_phase_end(SearchPhase.HYPERPARAMETER, 0.8, 1)
         logger.log_run_end(baseline, 1)
 
     records = _read_jsonl(log_path)
     assert [r["event"] for r in records] == [
         "run_start",
         "trial",
-        "phase_end",
         "run_end",
     ]
 
@@ -244,7 +210,7 @@ def test_log_is_flushed_after_each_write(tmp_path: Path) -> None:
     """File must be readable (non-empty) while logger is still open."""
     log_path = tmp_path / "run.jsonl"
     with RunLogger(str(log_path)) as logger:
-        logger.log_run_start("task", "val_acc", True, 10, 5)
+        logger.log_run_start("task", "val_acc", True, 10)
         records = _read_jsonl(log_path)
         assert len(records) == 1
 

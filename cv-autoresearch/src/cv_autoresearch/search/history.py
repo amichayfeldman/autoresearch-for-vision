@@ -7,7 +7,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from cv_autoresearch.types import Directive, SearchMode, SearchPhase, TrialId, TrialStatus
+from cv_autoresearch.types import Directive, SearchMode, TrialId, TrialStatus
 
 
 @dataclass(frozen=True)
@@ -16,10 +16,9 @@ class HistoryEntry:
 
     Args:
         trial_id: Unique identifier for the trial.
-        phase: Search phase (hyperparameter or augmentation).
         mode: Strategy mode (explore or exploit).
         directive: The directive that guided this trial.
-        param_name: Name of the parameter being varied (exploit mode only).
+        param_name: Name of the parameter being varied.
         param_value: Value used for param_name in this trial.
         metric_before: Baseline metric value before this trial.
         metric_after: Metric value achieved in this trial.
@@ -30,7 +29,6 @@ class HistoryEntry:
     """
 
     trial_id: TrialId
-    phase: SearchPhase
     mode: SearchMode
     directive: Directive
     param_name: str | None
@@ -165,7 +163,6 @@ class SearchHistory:
         for e in recent:
             parts = [
                 f"trial_id={e.trial_id}",
-                f"phase={e.phase.value}",
                 f"mode={e.mode.value}",
                 f"param_name={e.param_name}",
                 f"param_value={e.param_value}",

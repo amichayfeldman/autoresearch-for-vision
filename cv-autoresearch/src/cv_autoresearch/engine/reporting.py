@@ -6,7 +6,7 @@ from typing import Any
 
 from cv_autoresearch.config.schema import SearchConfig
 from cv_autoresearch.search.history import SearchHistory
-from cv_autoresearch.types import Baseline, SearchPhase
+from cv_autoresearch.types import Baseline
 
 
 def generate_summary(
@@ -23,11 +23,9 @@ def generate_summary(
 
     Returns:
         Dict with best_metric, best_hyperparams, best_augmentations,
-        total_trials, top_improvements, and phase_breakdown.
+        total_trials, failed_trials, and top_improvements.
     """
     top_entries = history.best_entries(top_k=10)
-    hp_trials = sum(1 for e in history.entries if e.phase == SearchPhase.HYPERPARAMETER)
-    aug_trials = sum(1 for e in history.entries if e.phase == SearchPhase.AUGMENTATION)
     failed_count = len(history.failed_entries())
 
     return {
@@ -38,6 +36,7 @@ def generate_summary(
         "best_hyperparams": baseline.hyperparams,
         "best_augmentations": baseline.augmentation_config,
         "total_trials": len(history.entries),
+        "failed_trials": failed_count,
         "top_improvements": [
             {
                 "trial_id": e.trial_id,
@@ -47,9 +46,4 @@ def generate_summary(
             }
             for e in top_entries
         ],
-        "phase_breakdown": {
-            "hyperparameter_trials": hp_trials,
-            "augmentation_trials": aug_trials,
-            "failed_trials": failed_count,
-        },
     }

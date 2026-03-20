@@ -37,41 +37,6 @@ def create_study(
     )
 
 
-def run_explore_trial(
-    study: optuna.Study,
-    objective_fn: Callable[[dict[str, Any]], float],
-    history: SearchHistory,
-    suggest_fn: Callable[[optuna.Trial], dict[str, Any]],
-) -> float:
-    """Run a single exploration trial, pruning duplicate configurations.
-
-    The inner objective calls suggest_fn to generate a config, checks for
-    duplicates via history, registers the config, then evaluates it.
-
-    Args:
-        study: The Optuna study to run the trial on.
-        objective_fn: Function that receives a config dict and returns a float metric.
-        history: SearchHistory used for duplicate detection and registration.
-        suggest_fn: Function that accepts an Optuna trial and returns a config dict.
-
-    Returns:
-        The objective value returned by objective_fn.
-    """
-    result_holder: list[float] = []
-
-    def _objective(trial: optuna.Trial) -> float:
-        config = suggest_fn(trial)
-        if history.is_duplicate(config):
-            raise optuna.TrialPruned()
-        history.register(config)
-        value = objective_fn(config)
-        result_holder.append(value)
-        return value
-
-    study.optimize(_objective, n_trials=1)
-    return result_holder[-1] if result_holder else float("nan")
-
-
 def run_exploit_phase(
     study: optuna.Study,
     objective_fn: Callable[[dict[str, Any]], float],

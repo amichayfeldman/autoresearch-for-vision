@@ -27,8 +27,7 @@ def main() -> None:
               help="Free-text task description passed to Claude for metric generation")
 @click.option("--metric", required=True, help="Primary metric name, e.g. accuracy")
 @click.option("--higher-is-better/--lower-is-better", default=True, show_default=True)
-@click.option("--hp-trials", default=50, show_default=True)
-@click.option("--aug-trials", default=30, show_default=True)
+@click.option("--total-trials", default=80, show_default=True)
 @click.option("--epochs", default=10, show_default=True, help="Epochs per trial")
 @click.option("--device", default="cuda", show_default=True)
 @click.option("--output", default="./autoresearch_results.json", show_default=True,
@@ -41,8 +40,7 @@ def run_cmd(
     task: str,
     metric: str,
     higher_is_better: bool,
-    hp_trials: int,
-    aug_trials: int,
+    total_trials: int,
     epochs: int,
     device: str,
     output: str,
@@ -59,8 +57,7 @@ def run_cmd(
         task_description=task,
         primary_metric=metric,
         higher_is_better=higher_is_better,
-        hp_trials=hp_trials,
-        aug_trials=aug_trials,
+        total_trials=total_trials,
         epochs_per_trial=epochs,
         device=device,
         optuna_storage=storage,
@@ -98,7 +95,7 @@ def history_cmd(storage: str, top: int) -> None:
     click.echo(f"\nTop {top} improvements (by |delta|):")
     for entry in history.best_entries(top_k=top):
         click.echo(
-            f"  trial={entry.trial_id} phase={entry.phase.value} "
+            f"  trial={entry.trial_id} mode={entry.mode.value} "
             f"delta={entry.delta:.4f} param={entry.param_name}"
         )
 
@@ -116,8 +113,7 @@ def history_cmd(storage: str, top: int) -> None:
 @click.option("--task", default="", help="Task description (required if not in storage)")
 @click.option("--metric", default="accuracy")
 @click.option("--higher-is-better/--lower-is-better", default=True)
-@click.option("--hp-trials", default=50, show_default=True)
-@click.option("--aug-trials", default=30, show_default=True)
+@click.option("--total-trials", default=80, show_default=True)
 @click.option("--epochs", default=10, show_default=True)
 @click.option("--device", default="cuda", show_default=True)
 @click.pass_context
@@ -129,8 +125,7 @@ def resume_cmd(
     task: str,
     metric: str,
     higher_is_better: bool,
-    hp_trials: int,
-    aug_trials: int,
+    total_trials: int,
     epochs: int,
     device: str,
 ) -> None:
@@ -148,8 +143,7 @@ def resume_cmd(
         task_description=task,
         primary_metric=metric,
         higher_is_better=higher_is_better,
-        hp_trials=hp_trials,
-        aug_trials=aug_trials,
+        total_trials=total_trials,
         epochs_per_trial=epochs,
         device=device,
         optuna_storage=storage,

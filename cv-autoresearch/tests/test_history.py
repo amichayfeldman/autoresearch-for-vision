@@ -14,7 +14,6 @@ from cv_autoresearch.search.history import (
 from cv_autoresearch.types import (
     Directive,
     SearchMode,
-    SearchPhase,
     TrialId,
     TrialStatus,
 )
@@ -25,16 +24,14 @@ from cv_autoresearch.types import (
 
 _DIRECTIVE = Directive(
     mode=SearchMode.EXPLORE,
-    target_param=None,
+    target_param="learning_rate",
     target_range=None,
-    phase=SearchPhase.HYPERPARAMETER,
     reason="test",
 )
 
 
 def _make_entry(
     trial_id: int = 1,
-    phase: SearchPhase = SearchPhase.HYPERPARAMETER,
     mode: SearchMode = SearchMode.EXPLORE,
     param_name: str | None = None,
     param_value: Any = None,
@@ -47,7 +44,6 @@ def _make_entry(
 ) -> HistoryEntry:
     return HistoryEntry(
         trial_id=TrialId(trial_id),
-        phase=phase,
         mode=mode,
         directive=_DIRECTIVE,
         param_name=param_name,

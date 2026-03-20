@@ -13,7 +13,10 @@ from cv_autoresearch.advisor.search_director import (
     _parse_directive,
     get_next_directive,
 )
-from cv_autoresearch.types import Baseline, Directive, SearchMode, SearchPhase, TrialId
+from cv_autoresearch.search.space import PARAM_REGISTRY
+from cv_autoresearch.types import Baseline, Directive, SearchMode, TrialId
+
+_FALLBACK_PARAM = next(iter(PARAM_REGISTRY))
 
 
 # ---------------------------------------------------------------------------
@@ -49,20 +52,18 @@ def test_build_directive_prompt_contains_task_description(baseline: Baseline, mo
         "classify cats vs dogs",
         mock_history,
         baseline,
-        SearchPhase.HYPERPARAMETER,
     )
     assert "classify cats vs dogs" in prompt
 
 
-def test_build_directive_prompt_contains_phase_value(baseline: Baseline, mock_history: MagicMock) -> None:
-    """Prompt must include the current phase value string."""
+def test_build_directive_prompt_contains_available_params(baseline: Baseline, mock_history: MagicMock) -> None:
+    """Prompt must list the first parameter from PARAM_REGISTRY."""
     prompt = _build_directive_prompt(
         "any task",
         mock_history,
         baseline,
-        SearchPhase.AUGMENTATION,
     )
-    assert SearchPhase.AUGMENTATION.value in prompt
+    assert _FALLBACK_PARAM in prompt
 
 
 def test_build_directive_prompt_contains_metric_as_float(baseline: Baseline, mock_history: MagicMock) -> None:
@@ -71,21 +72,19 @@ def test_build_directive_prompt_contains_metric_as_float(baseline: Baseline, moc
         "any task",
         mock_history,
         baseline,
-        SearchPhase.HYPERPARAMETER,
     )
-    # Formatted as float with 6 decimal places
     assert f"{baseline.primary_metric_value:.6f}" in prompt
 
 
 def test_build_directive_prompt_calls_history_to_text(baseline: Baseline, mock_history: MagicMock) -> None:
     """history.to_text(max_entries=20) must be called to render history."""
-    _build_directive_prompt("task", mock_history, baseline, SearchPhase.HYPERPARAMETER)
+    _build_directive_prompt("task", mock_history, baseline)
     mock_history.to_text.assert_called_once_with(max_entries=20)
 
 
 def test_build_directive_prompt_includes_history_text(baseline: Baseline, mock_history: MagicMock) -> None:
     """Rendered history text must appear in the prompt."""
-    prompt = _build_directive_prompt("task", mock_history, baseline, SearchPhase.HYPERPARAMETER)
+    prompt = _build_directive_prompt("task", mock_history, baseline)
     assert "trial 1: val_acc=0.85" in prompt
 
 
@@ -96,68 +95,60 @@ def test_build_directive_prompt_includes_history_text(baseline: Baseline, mock_h
 
 EXPLORE_RESPONSE = """\
 MODE: EXPLORE
-PARAM: NONE
+PARAM: learning_rate
 RANGE: NONE
-PHASE: hyperparameter
 REASON: History is short so broad exploration is best.
 """
 
 EXPLOIT_RESPONSE = """\
 MODE: EXPLOIT
-PARAM: lr
+PARAM: learning_rate
 RANGE: 0.001,0.01
-PHASE: hyperparameter
 REASON: Learning rate shows promise in recent trials.
 """
 
-AUGMENTATION_EXPLOIT_RESPONSE = """\
+EXPLOIT_AUG_RESPONSE = """\
 MODE: EXPLOIT
-PARAM: flip_prob
+PARAM: HorizontalFlip_enabled
 RANGE: 0.3,0.7
-PHASE: augmentation
 REASON: Flip probability is a key augmentation parameter.
 """
 
 
 @pytest.mark.parametrize(
-    "response, expected_mode, expected_param, expected_range, expected_phase",
+    "response, expected_mode, expected_param, expected_range",
     [
         (
             EXPLORE_RESPONSE,
             SearchMode.EXPLORE,
+            "learning_rate",
             None,
-            None,
-            SearchPhase.HYPERPARAMETER,
         ),
         (
             EXPLOIT_RESPONSE,
             SearchMode.EXPLOIT,
-            "lr",
+            "learning_rate",
             [0.001, 0.01],
-            SearchPhase.HYPERPARAMETER,
         ),
         (
-            AUGMENTATION_EXPLOIT_RESPONSE,
+            EXPLOIT_AUG_RESPONSE,
             SearchMode.EXPLOIT,
-            "flip_prob",
+            "HorizontalFlip_enabled",
             [0.3, 0.7],
-            SearchPhase.AUGMENTATION,
         ),
     ],
 )
 def test_parse_directive_valid_responses(
     response: str,
     expected_mode: SearchMode,
-    expected_param: str | None,
+    expected_param: str,
     expected_range: list[float] | None,
-    expected_phase: SearchPhase,
 ) -> None:
     """Parse valid structured Claude responses into correct Directives."""
-    directive = _parse_directive(response, SearchPhase.HYPERPARAMETER)
+    directive = _parse_directive(response)
     assert directive.mode == expected_mode
     assert directive.target_param == expected_param
     assert directive.target_range == expected_range
-    assert directive.phase == expected_phase
 
 
 @pytest.mark.parametrize(
@@ -167,25 +158,24 @@ def test_parse_directive_valid_responses(
         "this is not structured at all",
         "NO COLONS HERE\nAND HERE",
         "MODE EXPLORE\nPARAM NONE",  # missing colons
+        "MODE: EXPLORE\nPARAM: NONE\nRANGE: NONE\nREASON: test",  # PARAM is NONE
     ],
 )
 def test_parse_directive_garbage_falls_back_to_explore(bad_response: str) -> None:
     """Garbage or empty response must fall back to EXPLORE Directive."""
-    directive = _parse_directive(bad_response, SearchPhase.HYPERPARAMETER)
+    directive = _parse_directive(bad_response)
     assert directive.mode == SearchMode.EXPLORE
-    assert directive.target_param is None
-    assert directive.target_range is None
+    assert directive.target_param == _FALLBACK_PARAM
 
 
 def test_parse_directive_missing_mode_line_falls_back_to_explore() -> None:
     """Response without MODE line must fall back to EXPLORE."""
     response = """\
-PARAM: lr
+PARAM: learning_rate
 RANGE: 0.001,0.01
-PHASE: hyperparameter
 REASON: Some reason.
 """
-    directive = _parse_directive(response, SearchPhase.HYPERPARAMETER)
+    directive = _parse_directive(response)
     # Missing MODE defaults to EXPLORE per the implementation
     assert directive.mode == SearchMode.EXPLORE
 
@@ -195,17 +185,21 @@ REASON: Some reason.
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("phase", list(SearchPhase))
-def test_explore_fallback_returns_explore_directive(phase: SearchPhase) -> None:
-    """_explore_fallback must always return an EXPLORE Directive for any phase."""
-    directive = _explore_fallback(phase)
+def test_explore_fallback_returns_explore_directive() -> None:
+    """_explore_fallback must always return an EXPLORE Directive with fallback param."""
+    directive = _explore_fallback()
     assert directive == Directive(
         mode=SearchMode.EXPLORE,
-        target_param=None,
+        target_param=_FALLBACK_PARAM,
         target_range=None,
-        phase=phase,
         reason="Fallback to EXPLORE due to parse failure.",
     )
+
+
+def test_explore_fallback_target_param_is_in_registry() -> None:
+    """Fallback param must be a known PARAM_REGISTRY key."""
+    directive = _explore_fallback()
+    assert directive.target_param in PARAM_REGISTRY
 
 
 # ---------------------------------------------------------------------------
@@ -215,21 +209,17 @@ def test_explore_fallback_returns_explore_directive(phase: SearchPhase) -> None:
 
 def test_get_next_directive_valid_exploit_response(baseline: Baseline, mock_history: MagicMock) -> None:
     """get_next_directive returns correct Directive when claude returns valid EXPLOIT response."""
-    valid_response = EXPLOIT_RESPONSE
-
-    with patch("cv_autoresearch.advisor.search_director._call_claude", return_value=valid_response):
+    with patch("cv_autoresearch.advisor.search_director._call_claude", return_value=EXPLOIT_RESPONSE):
         directive = get_next_directive(
             task_description="classify cats vs dogs",
             history=mock_history,
             baseline=baseline,
-            current_phase=SearchPhase.HYPERPARAMETER,
             config=MagicMock(),
         )
 
     assert directive.mode == SearchMode.EXPLOIT
-    assert directive.target_param == "lr"
+    assert directive.target_param == "learning_rate"
     assert directive.target_range == [0.001, 0.01]
-    assert directive.phase == SearchPhase.HYPERPARAMETER
 
 
 def test_get_next_directive_claude_raises_falls_back_to_explore(
@@ -244,13 +234,11 @@ def test_get_next_directive_claude_raises_falls_back_to_explore(
             task_description="any task",
             history=mock_history,
             baseline=baseline,
-            current_phase=SearchPhase.AUGMENTATION,
             config=MagicMock(),
         )
 
     assert directive.mode == SearchMode.EXPLORE
-    assert directive.target_param is None
-    assert directive.phase == SearchPhase.AUGMENTATION
+    assert directive.target_param == _FALLBACK_PARAM
 
 
 # ---------------------------------------------------------------------------

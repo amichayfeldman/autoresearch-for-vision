@@ -6,6 +6,51 @@ from typing import Any, Callable
 
 import optuna
 
+# Source of truth for all searchable parameter names and their default ranges.
+# Two-element lists are [low, high] continuous float ranges (log-scale for learning params);
+# longer lists are treated as categorical choices.
+PARAM_REGISTRY: dict[str, list[Any]] = {
+    # Hyperparameters
+    "learning_rate": [1e-5, 1e-1],
+    "weight_decay": [1e-6, 1e-2],
+    "batch_size": [8, 16, 32, 64, 128, 256],
+    "optimizer_type": ["adam", "adamw", "sgd"],
+    "lr_scheduler": ["cosine", "step", "onecycle", "cosine_with_restarts"],
+    "lr_scheduler_gamma": [0.1, 0.9],
+    "lr_scheduler_step_size": [1, 20],
+    "warmup_epochs": [0, 10],
+    "warmup_momentum": [0.0, 0.95],
+    "gradient_clip_val": [0.1, 10.0],
+    "label_smoothing": [0.0, 0.2],
+    "dropout_rate": [0.0, 0.7],
+    "mixed_precision": [True, False],
+    "ema_decay": [0.99, 0.9999],
+    "momentum": [0.8, 0.99],
+    "beta1": [0.85, 0.95],
+    "beta2": [0.99, 0.9999],
+    # Augmentation enables (0.0–1.0; >0.5 means enabled)
+    "HorizontalFlip_enabled": [0.0, 1.0],
+    "VerticalFlip_enabled": [0.0, 1.0],
+    "RandomBrightnessContrast_enabled": [0.0, 1.0],
+    "RandomBrightnessContrast_brightness_limit": [0.0, 0.4],
+    "RandomBrightnessContrast_contrast_limit": [0.0, 0.4],
+    "ColorJitter_enabled": [0.0, 1.0],
+    "GaussianBlur_enabled": [0.0, 1.0],
+    "GaussianBlur_blur_limit": [3, 11],
+    "GaussNoise_enabled": [0.0, 1.0],
+    "RandomResizedCrop_enabled": [0.0, 1.0],
+    "RandomScale_enabled": [0.0, 1.0],
+    "RandomScale_scale_limit": [0.0, 0.5],
+    "Rotate_enabled": [0.0, 1.0],
+    "Rotate_limit": [5, 90],
+    "Perspective_enabled": [0.0, 1.0],
+    "CoarseDropout_enabled": [0.0, 1.0],
+    "Sharpen_enabled": [0.0, 1.0],
+    "CLAHE_enabled": [0.0, 1.0],
+    "RandomGamma_enabled": [0.0, 1.0],
+    "Normalize_enabled": [0.0, 1.0],
+}
+
 
 def _suggest_or_override(
     trial: optuna.Trial,

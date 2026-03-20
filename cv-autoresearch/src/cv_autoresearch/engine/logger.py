@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from cv_autoresearch.search.history import HistoryEntry
-from cv_autoresearch.types import Baseline, SearchPhase
+from cv_autoresearch.types import Baseline
 
 
 def _now() -> str:
@@ -31,7 +31,6 @@ class RunLogger:
     Event types:
         - ``run_start``: written once at the beginning of a run.
         - ``trial``: written after every trial (success or failure).
-        - ``phase_end``: written after each search phase completes.
         - ``run_end``: written once at the end of a run.
     """
 
@@ -51,8 +50,7 @@ class RunLogger:
         task_description: str,
         primary_metric: str,
         higher_is_better: bool,
-        hp_trials: int,
-        aug_trials: int,
+        total_trials: int,
     ) -> None:
         """Log the beginning of a run.
 
@@ -60,8 +58,7 @@ class RunLogger:
             task_description: User's free-text task description.
             primary_metric: Name of the metric being optimized.
             higher_is_better: Optimization direction.
-            hp_trials: Total hyperparameter trial budget.
-            aug_trials: Total augmentation trial budget.
+            total_trials: Total trial budget for the run.
         """
         self._write({
             "event": "run_start",
@@ -69,8 +66,7 @@ class RunLogger:
             "task": task_description,
             "metric": primary_metric,
             "higher_is_better": higher_is_better,
-            "hp_trials": hp_trials,
-            "aug_trials": aug_trials,
+            "total_trials": total_trials,
         })
 
     def log_trial(self, entry: HistoryEntry) -> None:
@@ -83,7 +79,6 @@ class RunLogger:
             "event": "trial",
             "ts": _now(),
             "trial_id": int(entry.trial_id),
-            "phase": entry.phase.value,
             "mode": entry.mode.value,
             "status": entry.status.value,
             "param_name": entry.param_name,
@@ -95,27 +90,6 @@ class RunLogger:
             "directive_reason": entry.directive.reason,
             "config": _serialise(entry.param_value),
             "error": entry.error_message,
-        })
-
-    def log_phase_end(
-        self,
-        phase: SearchPhase,
-        best_metric: float,
-        trials_in_phase: int,
-    ) -> None:
-        """Log the end of a search phase.
-
-        Args:
-            phase: The phase that just completed.
-            best_metric: Best metric value achieved by end of this phase.
-            trials_in_phase: Number of trials run in this phase.
-        """
-        self._write({
-            "event": "phase_end",
-            "ts": _now(),
-            "phase": phase.value,
-            "best_metric": best_metric,
-            "trials_in_phase": trials_in_phase,
         })
 
     def log_run_end(

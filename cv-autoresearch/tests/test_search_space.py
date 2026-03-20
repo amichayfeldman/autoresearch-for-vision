@@ -9,6 +9,7 @@ import optuna
 import pytest
 
 from cv_autoresearch.search.space import (
+    PARAM_REGISTRY,
     _suggest_or_override,
     exploit_space,
     suggest_augmentations,
@@ -298,6 +299,42 @@ def test_suggest_augmentations_returns_dict_with_known_transforms() -> None:
     assert isinstance(result, dict)
     assert "HorizontalFlip" in result
     assert "Normalize" in result
+
+
+# ---------------------------------------------------------------------------
+# PARAM_REGISTRY
+# ---------------------------------------------------------------------------
+
+
+def test_param_registry_contains_core_hp_params() -> None:
+    """PARAM_REGISTRY must contain the core hyperparameter names."""
+    required = {"learning_rate", "weight_decay", "batch_size", "optimizer_type", "lr_scheduler"}
+    assert required <= PARAM_REGISTRY.keys()
+
+
+def test_param_registry_contains_aug_params() -> None:
+    """PARAM_REGISTRY must contain augmentation enable flags."""
+    aug_params = {"HorizontalFlip_enabled", "VerticalFlip_enabled", "Rotate_enabled"}
+    assert aug_params <= PARAM_REGISTRY.keys()
+
+
+def test_param_registry_all_values_are_lists() -> None:
+    """Every value in PARAM_REGISTRY must be a list."""
+    for name, value in PARAM_REGISTRY.items():
+        assert isinstance(value, list), f"{name!r} value is not a list: {value!r}"
+
+
+def test_param_registry_continuous_params_have_two_elements() -> None:
+    """Two-element entries represent [low, high] float ranges."""
+    assert len(PARAM_REGISTRY["learning_rate"]) == 2
+    low, high = PARAM_REGISTRY["learning_rate"]
+    assert low < high
+
+
+def test_param_registry_categorical_params_have_more_than_two_elements() -> None:
+    """Categorical params have more than two choices."""
+    assert len(PARAM_REGISTRY["batch_size"]) > 2
+    assert len(PARAM_REGISTRY["optimizer_type"]) > 2
 
 
 def test_suggest_augmentations_disabled_transform_returns_none() -> None:
