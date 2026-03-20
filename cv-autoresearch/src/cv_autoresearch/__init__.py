@@ -1,7 +1,6 @@
 """cv-autoresearch: AI-directed CV hyperparameter and augmentation search."""
 
 from cv_autoresearch.config.schema import SearchConfig
+from cv_autoresearch.engine.autoresearch import run_autoresearch
 
-# run_autoresearch will be exported here once engine/autoresearch.py is implemented
-
-__all__ = ["SearchConfig"]
+__all__ = ["SearchConfig", "run_autoresearch"]
