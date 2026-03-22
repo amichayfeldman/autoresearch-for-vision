@@ -43,6 +43,7 @@ def _make_entry(
 ) -> HistoryEntry:
     return HistoryEntry(
         trial_id=TrialId(trial_id),
+        directive_id=0,
         mode=mode,
         directive=_DIRECTIVE,
         param_name=param_name,
@@ -125,6 +126,7 @@ def test_log_trial_success_writes_correct_fields(tmp_path: Path) -> None:
     rec = records[0]
     assert rec["event"] == "trial"
     assert rec["trial_id"] == 1
+    assert rec["directive_id"] == 0
     assert "phase" not in rec
     assert rec["mode"] == "explore"
     assert rec["status"] == "success"
