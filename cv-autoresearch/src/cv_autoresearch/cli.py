@@ -25,8 +25,6 @@ def main() -> None:
               help="Dotted import path to a factory function returning (train_ds, val_ds)")
 @click.option("--task", required=True,
               help="Free-text task description passed to Claude for metric generation")
-@click.option("--metric", required=True, help="Primary metric name, e.g. accuracy")
-@click.option("--higher-is-better/--lower-is-better", default=True, show_default=True)
 @click.option("--total-trials", default=80, show_default=True)
 @click.option("--epochs", default=10, show_default=True, help="Epochs per trial")
 @click.option("--device", default="cuda", show_default=True)
@@ -38,8 +36,6 @@ def run_cmd(
     trainer_module: str,
     train_dataset: str,
     task: str,
-    metric: str,
-    higher_is_better: bool,
     total_trials: int,
     epochs: int,
     device: str,
@@ -55,8 +51,6 @@ def run_cmd(
 
     config = SearchConfig(
         task_description=task,
-        primary_metric=metric,
-        higher_is_better=higher_is_better,
         total_trials=total_trials,
         epochs_per_trial=epochs,
         device=device,
@@ -110,9 +104,7 @@ def history_cmd(storage: str, top: int) -> None:
 @click.option("--storage", default="sqlite:///autoresearch.db", show_default=True)
 @click.option("--trainer-module", required=True)
 @click.option("--train-dataset", required=True)
-@click.option("--task", default="", help="Task description (required if not in storage)")
-@click.option("--metric", default="accuracy")
-@click.option("--higher-is-better/--lower-is-better", default=True)
+@click.option("--task", required=True, help="Task description for metric generation")
 @click.option("--total-trials", default=80, show_default=True)
 @click.option("--epochs", default=10, show_default=True)
 @click.option("--device", default="cuda", show_default=True)
@@ -123,8 +115,6 @@ def resume_cmd(
     trainer_module: str,
     train_dataset: str,
     task: str,
-    metric: str,
-    higher_is_better: bool,
     total_trials: int,
     epochs: int,
     device: str,
@@ -141,8 +131,6 @@ def resume_cmd(
 
     config = SearchConfig(
         task_description=task,
-        primary_metric=metric,
-        higher_is_better=higher_is_better,
         total_trials=total_trials,
         epochs_per_trial=epochs,
         device=device,

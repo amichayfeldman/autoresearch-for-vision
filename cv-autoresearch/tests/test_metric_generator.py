@@ -9,6 +9,7 @@ import pytest
 from cv_autoresearch.advisor.metric_generator import (
     _build_metric_prompt,
     _call_claude,
+    _parse_metric_response,
     _parse_yaml_from_response,
     generate_metric_config,
 )
@@ -16,19 +17,60 @@ from cv_autoresearch.advisor.metric_generator import (
 
 class TestBuildMetricPrompt:
     def test_contains_task_description(self) -> None:
-        prompt = _build_metric_prompt("object detection on COCO", "mAP")
+        prompt = _build_metric_prompt("object detection on COCO")
         assert "object detection on COCO" in prompt
 
-    def test_contains_primary_metric(self) -> None:
-        prompt = _build_metric_prompt("image classification", "Accuracy")
-        assert "Accuracy" in prompt
+    def test_requests_metric_name_and_direction(self) -> None:
+        prompt = _build_metric_prompt("image classification")
+        assert "metric_name" in prompt
+        assert "higher_is_better" in prompt
 
-    def test_contains_both_fields(self) -> None:
-        task = "semantic segmentation"
-        metric = "IoU"
-        prompt = _build_metric_prompt(task, metric)
-        assert task in prompt
-        assert metric in prompt
+    def test_requests_metric_config(self) -> None:
+        prompt = _build_metric_prompt("semantic segmentation")
+        assert "metric_config" in prompt
+
+
+class TestParseMetricResponse:
+    VALID_RESPONSE = """\
+metric_config:
+  _target_: torchmetrics.Accuracy
+  task: multiclass
+  num_classes: 10
+metric_name: accuracy
+higher_is_better: true
+"""
+
+    def test_returns_tuple_of_three(self) -> None:
+        result = _parse_metric_response(self.VALID_RESPONSE)
+        assert isinstance(result, tuple)
+        assert len(result) == 3
+
+    def test_metric_cfg_dict_has_target(self) -> None:
+        cfg, _, _ = _parse_metric_response(self.VALID_RESPONSE)
+        assert cfg["_target_"] == "torchmetrics.Accuracy"
+
+    def test_metric_name_extracted(self) -> None:
+        _, metric_name, _ = _parse_metric_response(self.VALID_RESPONSE)
+        assert metric_name == "accuracy"
+
+    def test_higher_is_better_extracted(self) -> None:
+        _, _, higher_is_better = _parse_metric_response(self.VALID_RESPONSE)
+        assert higher_is_better is True
+
+    def test_lower_is_better(self) -> None:
+        response = """\
+metric_config:
+  _target_: torchmetrics.MeanSquaredError
+metric_name: rmse
+higher_is_better: false
+"""
+        _, _, higher_is_better = _parse_metric_response(response)
+        assert higher_is_better is False
+
+    def test_metric_cfg_does_not_contain_meta_keys(self) -> None:
+        cfg, _, _ = _parse_metric_response(self.VALID_RESPONSE)
+        assert "metric_name" not in cfg
+        assert "higher_is_better" not in cfg
 
 
 class TestParseYamlFromResponse:
@@ -108,34 +150,82 @@ class TestCallClaude:
 
 
 class TestGenerateMetricConfig:
-    FAKE_YAML_RESPONSE = "_target_: torchmetrics.Accuracy\ntask: multiclass\nnum_classes: 10"
+    FAKE_RESPONSE = """\
+metric_config:
+  _target_: torchmetrics.Accuracy
+  task: multiclass
+  num_classes: 10
+metric_name: accuracy
+higher_is_better: true
+"""
+
+    def test_returns_tuple(self, tmp_path: pytest.TempPathFactory) -> None:
+        output_path = str(tmp_path / "metric.yaml")
+
+        with patch(
+            "cv_autoresearch.advisor.metric_generator._call_claude",
+            return_value=self.FAKE_RESPONSE,
+        ):
+            result = generate_metric_config(
+                task_description="image classification",
+                output_path=output_path,
+            )
+
+        assert isinstance(result, tuple)
+        assert len(result) == 3
 
     def test_returns_dictconfig_with_target_key(self, tmp_path: pytest.TempPathFactory) -> None:
         output_path = str(tmp_path / "metric.yaml")
 
         with patch(
             "cv_autoresearch.advisor.metric_generator._call_claude",
-            return_value=self.FAKE_YAML_RESPONSE,
+            return_value=self.FAKE_RESPONSE,
         ):
-            cfg = generate_metric_config(
+            cfg, _, _ = generate_metric_config(
                 task_description="image classification",
-                primary_metric="Accuracy",
                 output_path=output_path,
             )
 
         assert "_target_" in cfg
         assert cfg["_target_"] == "torchmetrics.Accuracy"
 
+    def test_returns_metric_name(self, tmp_path: pytest.TempPathFactory) -> None:
+        output_path = str(tmp_path / "metric.yaml")
+
+        with patch(
+            "cv_autoresearch.advisor.metric_generator._call_claude",
+            return_value=self.FAKE_RESPONSE,
+        ):
+            _, metric_name, _ = generate_metric_config(
+                task_description="image classification",
+                output_path=output_path,
+            )
+
+        assert metric_name == "accuracy"
+
+    def test_returns_higher_is_better(self, tmp_path: pytest.TempPathFactory) -> None:
+        output_path = str(tmp_path / "metric.yaml")
+
+        with patch(
+            "cv_autoresearch.advisor.metric_generator._call_claude",
+            return_value=self.FAKE_RESPONSE,
+        ):
+            _, _, higher_is_better = generate_metric_config(
+                task_description="image classification",
+                output_path=output_path,
+            )
+
+        assert higher_is_better is True
+
     def test_writes_yaml_file(self, tmp_path: pytest.TempPathFactory) -> None:
         output_path = tmp_path / "subdir" / "metric.yaml"
 
         with patch(
             "cv_autoresearch.advisor.metric_generator._call_claude",
-            return_value=self.FAKE_YAML_RESPONSE,
+            return_value=self.FAKE_RESPONSE,
         ):
             generate_metric_config(
                 task_description="image classification",
-                primary_metric="Accuracy",
                 output_path=str(output_path),
             )
 
@@ -147,11 +237,10 @@ class TestGenerateMetricConfig:
 
         with patch(
             "cv_autoresearch.advisor.metric_generator._call_claude",
-            return_value=self.FAKE_YAML_RESPONSE,
+            return_value=self.FAKE_RESPONSE,
         ):
-            cfg = generate_metric_config(
+            cfg, _, _ = generate_metric_config(
                 task_description="image classification",
-                primary_metric="Accuracy",
                 output_path=output_path,
             )
 

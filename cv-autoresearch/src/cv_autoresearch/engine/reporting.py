@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from cv_autoresearch.config.schema import SearchConfig
 from cv_autoresearch.search.history import SearchHistory
 from cv_autoresearch.types import Baseline
 
@@ -12,14 +11,14 @@ from cv_autoresearch.types import Baseline
 def generate_summary(
     baseline: Baseline,
     history: SearchHistory,
-    config: SearchConfig,
+    primary_metric: str,
 ) -> dict[str, Any]:
     """Generate a summary dict for a completed autoresearch run.
 
     Args:
         baseline: Final best baseline found.
         history: Full experiment history.
-        config: SearchConfig used for the run.
+        primary_metric: Name of the metric as inferred by the metric generator.
 
     Returns:
         Dict with best_metric, best_hyperparams, best_augmentations,
@@ -30,7 +29,7 @@ def generate_summary(
 
     return {
         "best_metric": {
-            "name": config.primary_metric,
+            "name": primary_metric,
             "value": baseline.primary_metric_value,
         },
         "best_hyperparams": baseline.hyperparams,
