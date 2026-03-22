@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.backends.legacy:build"
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "cv-autoresearch"
@@ -31,10 +31,19 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["cv-autoresearch/src"]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "ruff>=0.1",
+    "mypy>=1.0",
+]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["cv-autoresearch/tests"]
 addopts = "-v --cov=cv_autoresearch --cov-report=term-missing"
 
 [tool.black]
