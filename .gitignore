@@ -12,3 +12,4 @@ test_autoresearch.db
 .coverage
 .vscode/launch.json
 docs/plans/**
+.worktrees/
