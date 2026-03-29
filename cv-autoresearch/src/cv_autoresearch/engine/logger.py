@@ -78,6 +78,7 @@ class RunLogger:
         self._write({
             "event": "trial",
             "ts": _now(),
+            "directive_id": entry.directive_id,
             "trial_id": int(entry.trial_id),
             "mode": entry.mode.value,
             "status": entry.status.value,

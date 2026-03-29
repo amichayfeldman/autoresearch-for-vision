@@ -38,6 +38,7 @@ def _make_entry(
 ) -> HistoryEntry:
     return HistoryEntry(
         trial_id=TrialId(trial_id),
+        directive_id=0,
         mode=SearchMode.EXPLORE,
         directive=_DIRECTIVE,
         param_name=param_name,

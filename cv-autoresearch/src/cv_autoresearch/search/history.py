@@ -16,6 +16,8 @@ class HistoryEntry:
 
     Args:
         trial_id: Unique identifier for the trial.
+        directive_id: ID of the directive step that spawned this trial.
+            All Bayesian trials within one directive share the same directive_id.
         mode: Strategy mode (explore or exploit).
         directive: The directive that guided this trial.
         param_name: Name of the parameter being varied.
@@ -29,6 +31,7 @@ class HistoryEntry:
     """
 
     trial_id: TrialId
+    directive_id: int
     mode: SearchMode
     directive: Directive
     param_name: str | None
@@ -128,6 +131,18 @@ class SearchHistory:
         """
         return [e for e in self.entries if e.status == TrialStatus.FAILED]
 
+    def entries_by_directive(self) -> dict[int, list[HistoryEntry]]:
+        """Group entries by their directive_id in insertion order.
+
+        Returns:
+            Dict mapping directive_id to the list of HistoryEntry objects
+            that share that id, preserving insertion order within each group.
+        """
+        grouped: dict[int, list[HistoryEntry]] = {}
+        for entry in self.entries:
+            grouped.setdefault(entry.directive_id, []).append(entry)
+        return grouped
+
     def exploit_objective_values(self, param_name: str) -> list[float]:
         """Return Optuna objective values for all EXPLOIT entries on a given param.
 
@@ -148,31 +163,56 @@ class SearchHistory:
         ]
 
     def to_text(self, max_entries: int = 20) -> str:
-        """Format the most recent entries as human-readable text for Claude prompts.
+        """Format history as one aggregated line per directive step for Claude prompts.
 
-        Entries are ordered most-recent first.
+        Each line summarises all Bayesian trials within a directive step:
+        the parameter targeted, how many trials ran, the value range tried,
+        and the best result found. Steps are ordered most-recent first.
 
         Args:
-            max_entries: Maximum number of entries to include.
+            max_entries: Maximum number of directive steps to include.
 
         Returns:
-            Multi-line string representation of recent history.
+            Multi-line string with one line per directive step.
         """
-        recent = list(reversed(self.entries))[:max_entries]
+        grouped = self.entries_by_directive()
+        recent_ids = sorted(grouped.keys(), reverse=True)[:max_entries]
         lines: list[str] = []
-        for e in recent:
-            parts = [
-                f"trial_id={e.trial_id}",
-                f"mode={e.mode.value}",
-                f"param_name={e.param_name}",
-                f"param_value={e.param_value}",
-                f"delta={e.delta:.6f}",
-                f"improved={e.improved}",
-                f"status={e.status.value}",
+        for did in recent_ids:
+            group = grouped[did]
+            success = [
+                e for e in group
+                if e.status == TrialStatus.SUCCESS and e.metric_after is not None
             ]
-            if e.optuna_objective_value is not None:
-                parts.append(f"optuna_objective={e.optuna_objective_value}")
-            if e.status == TrialStatus.FAILED and e.error_message is not None:
-                parts.append(f"error={e.error_message}")
+            n_trials = len(group)
+            mode = group[0].mode.value
+            param_name = group[0].param_name
+
+            if success:
+                best = max(success, key=lambda e: (e.improved, abs(e.delta)))
+                improved = any(e.improved for e in success)
+                values = [e.param_value for e in group if e.param_value is not None]
+                try:
+                    tried_range = f"[{min(values):.4g} .. {max(values):.4g}]"
+                except (TypeError, ValueError):
+                    tried_range = str(set(str(v) for v in values))
+                parts = [
+                    f"step={did}",
+                    f"mode={mode}",
+                    f"param={param_name}",
+                    f"n_trials={n_trials}",
+                    f"best_value={best.param_value}",
+                    f"best_delta={best.delta:+.6f}",
+                    f"improved={improved}",
+                    f"tried_range={tried_range}",
+                ]
+            else:
+                parts = [
+                    f"step={did}",
+                    f"mode={mode}",
+                    f"param={param_name}",
+                    f"n_trials={n_trials}",
+                    "all_failed=True",
+                ]
             lines.append(" | ".join(parts))
         return "\n".join(lines)

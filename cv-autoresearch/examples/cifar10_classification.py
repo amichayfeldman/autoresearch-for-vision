@@ -77,8 +77,6 @@ if __name__ == "__main__":
             "The model outputs logits for 10 classes. "
             "Optimize top-1 accuracy on the validation set."
         ),
-        primary_metric="accuracy",
-        higher_is_better=True,
         hp_trials=30,
         aug_trials=20,
         epochs_per_trial=5,

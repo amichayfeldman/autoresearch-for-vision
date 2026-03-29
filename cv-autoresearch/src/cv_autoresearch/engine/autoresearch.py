@@ -80,46 +80,47 @@ def run_autoresearch(
 
     Path(config.output_dir).mkdir(parents=True, exist_ok=True)
 
+    metric_cfg, primary_metric, higher_is_better = generate_metric_config(
+        config.task_description,
+        config.metric_config_path,
+    )
+    metric = instantiate_metric(metric_cfg)
+
     with RunLogger(config.log_path) as logger:
         logger.log_run_start(
             config.task_description,
-            config.primary_metric,
-            config.higher_is_better,
+            primary_metric,
+            higher_is_better,
             config.total_trials,
         )
-
-        metric_cfg = generate_metric_config(
-            config.task_description,
-            config.primary_metric,
-            config.metric_config_path,
-        )
-        metric = instantiate_metric(metric_cfg)
 
         baseline = _run_initial_baseline(
             user_module, train_dataset, val_dataset, metric, config, logger
         )
 
         study = create_study(
-            name=f"{config.primary_metric}_search",
-            direction="maximize" if config.higher_is_better else "minimize",
+            name=f"{primary_metric}_search",
+            direction="maximize" if higher_is_better else "minimize",
             storage=config.optuna_storage,
             seed=config.optuna_seed,
         )
 
-        trial_counter = 0
-        while trial_counter < config.total_trials:
+        directive_counter = 0
+        while directive_counter < config.total_trials:
             directive = get_next_directive(
                 config.task_description, history, baseline, config
             )
+            directive_id = directive_counter
             param_range = list(directive.target_range or PARAM_REGISTRY.get(
                 directive.target_param, [0.0, 1.0]
             ))
             full_baseline = {**baseline.hyperparams, **baseline.augmentation_config}
-            results = run_exploit_phase(
+            run_exploit_phase(
                 study,
-                lambda cfg: _run_trial(
+                lambda cfg, _did=directive_id: _run_trial(
                     cfg, user_module, train_dataset, val_dataset, metric, config,
-                    history, baseline, directive, hooks, logger,
+                    history, baseline, directive, hooks, logger, higher_is_better,
+                    directive_id=_did,
                 ),
                 history,
                 full_baseline,
@@ -127,20 +128,20 @@ def run_autoresearch(
                 param_range,
                 config.exploit_trials_per_directive,
             )
-            trial_counter += len(results)
-            baseline = _refresh_baseline(history, baseline, config.higher_is_better)
+            directive_counter += 1
+            baseline = _refresh_baseline(history, baseline, higher_is_better)
 
         hooks.analyze_experiment(history, baseline)
         logger.log_run_end(baseline, len(history.entries))
 
     plot_improvement_curve(
         history,
-        config.primary_metric,
-        config.higher_is_better,
+        primary_metric,
+        higher_is_better,
         config.plot_path,
     )
 
-    return generate_summary(baseline, history, config)
+    return generate_summary(baseline, history, primary_metric)
 
 
 def _run_initial_baseline(
@@ -198,6 +199,8 @@ def _run_trial(
     directive: Directive,
     hooks: VLMHooks,
     logger: RunLogger,
+    higher_is_better: bool,
+    directive_id: int = 0,
 ) -> float:
     """Execute one trial: train + evaluate, record result, call hooks.
 
@@ -217,12 +220,15 @@ def _run_trial(
         directive: Directive that produced this trial.
         hooks: VLM hooks for analysis.
         logger: RunLogger for JSONL event writing.
+        higher_is_better: Optimization direction from metric generator.
+        directive_id: ID of the directive step that spawned this trial. All
+            Bayesian trials within one directive share the same directive_id.
 
     Returns:
         Metric value (or worst possible on failure).
     """
     trial_id = TrialId(len(history.entries))
-    worst = -math.inf if config.higher_is_better else math.inf
+    worst = -math.inf if higher_is_better else math.inf
 
     hp_config = {k: v for k, v in full_config.items() if k in _KNOWN_HP_PARAMS}
     aug_config = {k: v for k, v in full_config.items() if k in _KNOWN_AUG_TRANSFORMS}
@@ -231,10 +237,11 @@ def _run_trial(
         value = _train_and_evaluate(
             user_module, hp_config, aug_config, train_dataset, val_dataset, metric, config
         )
-        improved = should_update_baseline(value, baseline.primary_metric_value, config.higher_is_better)
+        improved = should_update_baseline(value, baseline.primary_metric_value, higher_is_better)
         param_value = full_config.get(directive.target_param)
         entry = HistoryEntry(
             trial_id=trial_id,
+            directive_id=directive_id,
             mode=directive.mode,
             directive=directive,
             param_name=directive.target_param,
@@ -253,6 +260,7 @@ def _run_trial(
     except Exception as exc:  # noqa: BLE001
         entry = HistoryEntry(
             trial_id=trial_id,
+            directive_id=directive_id,
             mode=directive.mode,
             directive=directive,
             param_name=directive.target_param,

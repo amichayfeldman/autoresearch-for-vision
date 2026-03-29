@@ -58,8 +58,6 @@ class TinyModel(LightningModule):
 def tiny_config() -> SearchConfig:
     return SearchConfig(
         task_description="Binary classification test",
-        primary_metric="accuracy",
-        higher_is_better=True,
         total_trials=4,
         epochs_per_trial=1,
         exploit_trials_per_directive=1,
@@ -116,6 +114,7 @@ def _make_entry(
     delta: float,
     status: TrialStatus,
     directive: Directive | None = None,
+    directive_id: int = 0,
 ) -> HistoryEntry:
     if directive is None:
         directive = Directive(SearchMode.EXPLORE, "learning_rate", None, "test")
@@ -123,6 +122,7 @@ def _make_entry(
     after = before + delta if status != TrialStatus.FAILED else None
     return HistoryEntry(
         trial_id=TrialId(trial_id),
+        directive_id=directive_id,
         mode=SearchMode.EXPLORE,
         directive=directive,
         param_name=None,
@@ -141,9 +141,8 @@ def test_generate_summary_contains_required_keys() -> None:
     history.record(_make_entry(1, 0.1, TrialStatus.SUCCESS))
     history.record(_make_entry(2, -0.05, TrialStatus.SUCCESS))
     baseline = Baseline(0.6, {"lr": 1e-3}, {})
-    config = SearchConfig("task", "accuracy", True)
 
-    result = generate_summary(baseline, history, config)
+    result = generate_summary(baseline, history, "accuracy")
 
     assert "best_metric" in result
     assert result["best_metric"]["name"] == "accuracy"
@@ -161,9 +160,8 @@ def test_generate_summary_failed_trials_counted() -> None:
     history.record(_make_entry(1, 0.1, TrialStatus.SUCCESS))
     history.record(_make_entry(2, 0.0, TrialStatus.FAILED))
     baseline = Baseline(0.6, {}, {})
-    config = SearchConfig("task", "accuracy", True)
 
-    result = generate_summary(baseline, history, config)
+    result = generate_summary(baseline, history, "accuracy")
 
     assert result["failed_trials"] == 1
 
@@ -187,8 +185,8 @@ def test_run_autoresearch_returns_summary_keys(tiny_config: SearchConfig) -> Non
         patch("cv_autoresearch.engine.autoresearch._train_and_evaluate") as mock_train,
         patch("cv_autoresearch.advisor.search_director._call_claude") as mock_claude,
     ):
-        # Mock metric generation
-        mock_gen.return_value = MagicMock()
+        # Mock metric generation — returns (DictConfig, metric_name, higher_is_better)
+        mock_gen.return_value = (MagicMock(), "accuracy", True)
         mock_metric = MagicMock()
         mock_metric.compute.return_value = torch.tensor(mock_metric_value)
         mock_inst.return_value = mock_metric
@@ -236,7 +234,7 @@ def test_run_autoresearch_failed_trial_does_not_update_baseline(
         patch("cv_autoresearch.engine.autoresearch._train_and_evaluate", side_effect=flaky_train),
         patch("cv_autoresearch.advisor.search_director._call_claude") as mock_claude,
     ):
-        mock_gen.return_value = MagicMock()
+        mock_gen.return_value = (MagicMock(), "accuracy", True)
         mock_inst.return_value = MagicMock()
         mock_claude.return_value = (
             "MODE: EXPLORE\nPARAM: learning_rate\nRANGE: NONE\nREASON: Exploring."

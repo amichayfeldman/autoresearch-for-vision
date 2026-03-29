@@ -11,52 +11,52 @@ from omegaconf import DictConfig, OmegaConf
 
 def generate_metric_config(
     task_description: str,
-    primary_metric: str,
     output_path: str,
-) -> DictConfig:
+) -> tuple[DictConfig, str, bool]:
     """Generate a Hydra metric config using claude -p.
 
-    Calls claude -p once at startup with the task description and asks it to
-    produce a Hydra _target_ config for a torchmetrics Metric class.
-    Writes the result to output_path as YAML.
-    Loads and returns it as an OmegaConf DictConfig.
+    Calls claude -p once at startup with the task description. Claude selects
+    the appropriate torchmetrics metric, a human-readable name, and whether
+    higher values are better.
 
     Args:
         task_description: Free-text description of the CV task.
-        primary_metric: Name of the metric to be generated.
-        output_path: Path to write the generated YAML.
+        output_path: Path to write the generated YAML (metric_config only).
 
     Returns:
-        OmegaConf DictConfig ready for hydra.utils.instantiate.
+        Tuple of (DictConfig ready for hydra.utils.instantiate, metric_name, higher_is_better).
     """
-    prompt = _build_metric_prompt(task_description, primary_metric)
+    prompt = _build_metric_prompt(task_description)
     response = _call_claude(prompt)
-    config_dict = _parse_yaml_from_response(response)
-    return _write_and_load_config(config_dict, output_path)
+    metric_cfg_dict, metric_name, higher_is_better = _parse_metric_response(response)
+    cfg = _write_and_load_config(metric_cfg_dict, output_path)
+    return cfg, metric_name, higher_is_better
 
 
-def _build_metric_prompt(task_description: str, primary_metric: str) -> str:
+def _build_metric_prompt(task_description: str) -> str:
     """Build the claude -p prompt for metric generation.
 
     Returns:
-        Prompt string requesting Hydra _target_ YAML for a torchmetrics metric.
+        Prompt string requesting structured YAML with metric config, name, and direction.
     """
     return f"""You are an expert in PyTorch and torchmetrics.
 
 Task description: {task_description}
-Requested metric name: {primary_metric}
 
-Generate a valid Hydra _target_ YAML config that instantiates a torchmetrics metric
-for this task. The config must be valid YAML with a `_target_` key pointing to a
-torchmetrics class (e.g. torchmetrics.Accuracy, torchmetrics.detection.MeanAveragePrecision, etc.)
-and any required constructor arguments.
+Select the most appropriate primary metric for this computer vision task.
+Output EXACTLY this YAML structure, no explanation:
 
-Output ONLY the YAML config, no explanation.
+metric_config:
+  _target_: torchmetrics.Accuracy
+  task: multiclass
+  num_classes: 10
+metric_name: accuracy
+higher_is_better: true
 
-Example output format:
-_target_: torchmetrics.Accuracy
-task: multiclass
-num_classes: 10
+Rules:
+- metric_config must have a _target_ key pointing to a torchmetrics class
+- metric_name is a short snake_case string (e.g. accuracy, auroc, miou, map)
+- higher_is_better is true if larger values mean better performance, false for error metrics (rmse, mae, loss)
 """
 
 
@@ -81,6 +81,26 @@ def _call_claude(prompt: str) -> str:
     if result.returncode != 0:
         raise RuntimeError(f"claude -p failed: {result.stderr}")
     return result.stdout.strip()
+
+
+def _parse_metric_response(response: str) -> tuple[dict, str, bool]:
+    """Extract metric config, name, and direction from claude's structured response.
+
+    Strips markdown code fences if present, parses the top-level YAML which
+    must contain metric_config, metric_name, and higher_is_better keys.
+
+    Args:
+        response: Raw string response from claude.
+
+    Returns:
+        Tuple of (metric_cfg_dict, metric_name, higher_is_better).
+
+    Raises:
+        KeyError: If required keys are missing from the response.
+        yaml.YAMLError: If the response cannot be parsed as YAML.
+    """
+    full = _parse_yaml_from_response(response)
+    return full["metric_config"], str(full["metric_name"]), bool(full["higher_is_better"])
 
 
 def _parse_yaml_from_response(response: str) -> dict:

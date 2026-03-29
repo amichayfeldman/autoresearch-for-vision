@@ -21,11 +21,11 @@ class SearchConfig:
     """
 
     task_description: str
-    primary_metric: str
-    higher_is_better: bool
+    # Number of directive steps (each step runs exploit_trials_per_directive Bayesian trials).
+    # Actual training runs = total_trials × exploit_trials_per_directive.
     total_trials: int = 80
-    epochs_per_trial: int = 10
-    exploit_trials_per_directive: int = 5
+    epochs_per_trial: int = 7
+    exploit_trials_per_directive: int = 10
     optuna_storage: str = "sqlite:///autoresearch.db"
     optuna_seed: int = 42
     hp_overrides: dict[str, Any] = field(default_factory=dict)

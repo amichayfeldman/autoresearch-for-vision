@@ -44,6 +44,7 @@ def _make_entry(
 ) -> HistoryEntry:
     return HistoryEntry(
         trial_id=TrialId(trial_id),
+        directive_id=0,
         mode=mode,
         directive=_DIRECTIVE,
         param_name=param_name,
@@ -168,14 +169,14 @@ def test_history_entry_delta_when_both_none() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_to_text_includes_trial_id() -> None:
+def test_to_text_includes_step() -> None:
     history = SearchHistory()
-    history.record(_make_entry(trial_id=42, param_name="lr"))
+    history.record(_make_entry(trial_id=1, param_name="lr"))
     text = history.to_text()
-    assert "42" in text
+    assert "step=0" in text
 
 
-def test_to_text_includes_failed_entry_with_error_message() -> None:
+def test_to_text_includes_failed_entry_with_all_failed() -> None:
     history = SearchHistory()
     history.record(
         _make_entry(
@@ -185,36 +186,73 @@ def test_to_text_includes_failed_entry_with_error_message() -> None:
         )
     )
     text = history.to_text()
-    assert "CUDA out of memory" in text
+    assert "all_failed=True" in text
 
 
-def test_to_text_includes_optuna_objective_value() -> None:
+def test_to_text_includes_best_value() -> None:
     history = SearchHistory()
-    history.record(_make_entry(trial_id=3, optuna_objective_value=0.8765))
+    history.record(
+        _make_entry(
+            trial_id=3,
+            param_value=0.8765,
+            metric_before=0.5,
+            metric_after=0.8765,
+            optuna_objective_value=0.8765,
+        )
+    )
     text = history.to_text()
-    assert "0.8765" in text
+    # New format: one aggregated line per directive step
+    assert "best_value=0.8765" in text
+    assert "best_delta=+0.376500" in text
 
 
 def test_to_text_max_entries_limits_output() -> None:
     history = SearchHistory()
     for i in range(30):
-        history.record(_make_entry(trial_id=i))
+        entry = HistoryEntry(
+            trial_id=TrialId(i),
+            directive_id=i,
+            mode=SearchMode.EXPLORE,
+            directive=_DIRECTIVE,
+            param_name=None,
+            param_value=None,
+            metric_before=None,
+            metric_after=None,
+            optuna_objective_value=None,
+            improved=False,
+            status=TrialStatus.SUCCESS,
+            error_message=None,
+        )
+        history.record(entry)
     text = history.to_text(max_entries=5)
-    # Most recent 5 entries: trial_ids 25-29
-    assert "29" in text
-    # Earliest entries should not appear
-    assert "trial_id=0" not in text
+    # Most recent 5 directive steps: ids 25-29
+    assert "step=29" in text
+    # Earliest directive step should not appear
+    assert "step=0" not in text
 
 
 def test_to_text_most_recent_first() -> None:
-    """Most recent entries must appear first in the text output."""
+    """Most recent directive steps must appear first in the text output."""
     history = SearchHistory()
     for i in range(3):
-        history.record(_make_entry(trial_id=i))
+        entry = HistoryEntry(
+            trial_id=TrialId(i),
+            directive_id=i,
+            mode=SearchMode.EXPLORE,
+            directive=_DIRECTIVE,
+            param_name=None,
+            param_value=None,
+            metric_before=None,
+            metric_after=None,
+            optuna_objective_value=None,
+            improved=False,
+            status=TrialStatus.SUCCESS,
+            error_message=None,
+        )
+        history.record(entry)
     text = history.to_text()
-    idx_0 = text.find("trial_id")
-    # The first occurrence of trial_id in the text should be the latest (2)
-    assert "2" in text.split("\n")[0] or text.index("2") < text.index("0")
+    # Most recent directive_id (2) should appear before earlier ones
+    assert text.index("step=2") < text.index("step=0")
 
 
 # ---------------------------------------------------------------------------
