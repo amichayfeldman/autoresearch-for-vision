@@ -1,13 +1,13 @@
 {
-  "include": ["cv-autoresearch/src", "cv-autoresearch/tests"],
+  "include": ["src", "tests"],
   "pythonVersion": "3.10",
   "executionEnvironments": [
     {
-      "root": "cv-autoresearch/src"
+      "root": "src"
     },
     {
-      "root": "cv-autoresearch/tests",
-      "extraPaths": ["cv-autoresearch/src"]
+      "root": "tests",
+      "extraPaths": ["src"]
     }
   ]
 }

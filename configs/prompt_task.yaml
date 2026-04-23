@@ -1,0 +1,6 @@
+defaults:
+  - config
+  - _self_
+
+history:
+  output_dir: outputs/prompt_task
