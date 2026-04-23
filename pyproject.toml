@@ -13,13 +13,17 @@ dependencies = [
     "optuna>=3.0",
     "albumentations>=1.3",
     "hydra-core>=1.3",
+    "matplotlib>=3.7",
     "omegaconf>=2.3",
+    "torchvision>=0.15",
     "click>=8.0",
     "numpy>=1.24",
 ]
 
 [project.scripts]
 cv-autoresearch = "cv_autoresearch.cli:main"
+cv-autoresearch-train = "cv_autoresearch.engine.scripts.run_training:main"
+cv-autoresearch-iterations = "cv_autoresearch.engine.scripts.manage_iterations:main"
 
 [project.optional-dependencies]
 dev = [
@@ -31,7 +35,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["cv-autoresearch/src"]
+where = ["src"]
 
 [tool.uv]
 dev-dependencies = [
@@ -43,7 +47,7 @@ dev-dependencies = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["cv-autoresearch/tests"]
+testpaths = ["tests"]
 addopts = "-v --cov=cv_autoresearch --cov-report=term-missing"
 
 [tool.black]

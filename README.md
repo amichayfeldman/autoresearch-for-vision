@@ -49,6 +49,21 @@ For development (tests, linting):
 pip install -e ".[dev]"
 ```
 
+## Repository Layout
+
+```text
+src/cv_autoresearch/  Python package imported as `cv_autoresearch`
+tests/                Pytest suite
+examples/             Runnable examples and task definitions
+configs/              Hydra configs for training and iteration runs
+docs/                 Project documentation
+agents/               Local agent skill and boundary definitions
+```
+
+The project distribution is still named `cv-autoresearch`, while the Python
+import package is `cv_autoresearch` because Python module names cannot contain
+hyphens.
+
 ## Quick Start — Python API
 
 ```python

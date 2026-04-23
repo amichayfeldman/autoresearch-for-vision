@@ -1,0 +1,5 @@
+primary_metric: f1
+num_classes: 2
+required_metrics:
+  - precision
+  - recall

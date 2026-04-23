@@ -1,6 +1,9 @@
 **/__pycache__/**
 **/**.pyc
 CLAUDE.md
+.codex
+.pytest_cache/
+.ruff_cache/
 **/.venv/
 .venv/
 *.egg-info/
@@ -10,6 +13,13 @@ uv.lock
 test_autoresearch.db
 .python-version
 .coverage
+.coverage.*
 .vscode/launch.json
 docs/plans/**
 .worktrees/
+**.ckpt
+checkpoints/
+output/
+outputs/
+autoresearch_output/
+autoresearch.db

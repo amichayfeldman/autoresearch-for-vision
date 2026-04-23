@@ -1,0 +1,9 @@
+name: synthetic_prompt
+source: synthetic
+batch_size: 8
+num_workers: 0
+train_size: 32
+val_size: 16
+image_size: 16
+channels: 3
+download: false
