@@ -2,120 +2,73 @@
 
 from __future__ import annotations
 
-import importlib
-import json
-import sys
-from typing import Any
+from pathlib import Path
 
 import click
+from hydra import compose, initialize_config_dir
+from omegaconf import DictConfig
 
-from cv_autoresearch.autoresearch import run
+from cv_autoresearch.engine.manager import manage_iterations
 
 
 @click.group()
 def main() -> None:
-    """cv-autoresearch: AI-directed CV hyperparameter and augmentation search."""
+    """Run agent-managed computer-vision autoresearch."""
 
 
-@main.command("run")
-@click.option("--task-factory", required=True,
-              help="Dotted import path to a zero-arg function returning a TaskDef, "
-                   "e.g. mypackage.tasks.make_cifar10_task")
-@click.option("--total-directives", default=20, show_default=True)
-@click.option("--trials-per-directive", default=5, show_default=True)
-@click.option("--epochs", default=7, show_default=True, help="Epochs per trial")
-@click.option("--device", default="cuda", show_default=True)
-@click.option("--output", default="./autoresearch_results.json", show_default=True,
-              help="Path to write final summary JSON")
-@click.option("--storage", default="sqlite:///autoresearch.db", show_default=True,
-              help="Optuna storage URL")
+@main.command("run", context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
+@click.option("--task-prompt", default=None, help="Free-text CV task for the wiring agent.")
+@click.option(
+    "--task-prompt-file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="File containing the CV task prompt.",
+)
+@click.option(
+    "--model-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Optional .pt model path for the task-wiring phase.",
+)
+@click.pass_context
 def run_cmd(
-    task_factory: str,
-    total_directives: int,
-    trials_per_directive: int,
-    epochs: int,
-    device: str,
-    output: str,
-    storage: str,
+    ctx: click.Context,
+    task_prompt: str | None,
+    task_prompt_file: Path | None,
+    model_path: Path | None,
 ) -> None:
-    """Run the full autoresearch pipeline from the command line."""
-    factory = _import_dotted_path(task_factory)
-    task = factory()
+    """Run baseline plus agent-controlled iterations.
 
-    result = run(
-        task,
-        total_directives=total_directives,
-        trials_per_directive=trials_per_directive,
-        epochs_per_trial=epochs,
-        device=device,
-        optuna_storage=storage,
-    )
-
-    with open(output, "w") as f:
-        json.dump(result, f, indent=2, default=str)
-
-    click.echo(f"Results written to {output}")
-    click.echo(f"Best F1: {result['best_f1']:.4f}")
-
-
-@main.command("history")
-@click.option("--storage", default="sqlite:///autoresearch.db", show_default=True)
-@click.option("--top", default=10, show_default=True, help="Show top N improvements")
-def history_cmd(storage: str, top: int) -> None:
-    """Print experiment history from an existing Optuna storage."""
-    import optuna
-    from cv_autoresearch.search.history import SearchHistory
-
-    try:
-        study_names = optuna.get_all_study_names(storage)
-    except Exception as exc:
-        click.echo(f"Could not load storage: {exc}", err=True)
-        sys.exit(1)
-
-    if not study_names:
-        click.echo("No studies found in storage.")
-        return
-
-    history = SearchHistory()
-    click.echo(f"Studies found: {', '.join(study_names)}")
-    click.echo(f"\nTop {top} improvements (by |delta|):")
-    for entry in history.best_entries(top_k=top):
-        click.echo(
-            f"  trial={entry.trial_id} mode={entry.mode.value} "
-            f"delta={entry.delta:.4f} param={entry.param_name}"
-        )
-
-    failed = history.failed_entries()
-    if failed:
-        click.echo(f"\nFailed trials ({len(failed)}):")
-        for entry in failed:
-            click.echo(f"  trial={entry.trial_id}: {entry.error_message}")
-
-
-def _import_dotted_path(dotted_path: str) -> Any:
-    """Import a class or function from a dotted Python path.
-
-    Args:
-        dotted_path: Dotted import path, e.g. "mypackage.module.ClassName".
-
-    Returns:
-        The imported class or function.
-
-    Raises:
-        SystemExit: If the path cannot be imported, with a clean error message.
+    Unknown trailing arguments are passed through as Hydra overrides, for example:
+    ``iteration.max_iterations=3 optimizer.learning_rate=0.001``.
     """
-    parts = dotted_path.rsplit(".", 1)
-    if len(parts) != 2:
-        click.echo(f"Invalid import path: '{dotted_path}' (expected 'module.ClassName')", err=True)
-        sys.exit(1)
-    module_path, attr_name = parts
-    try:
-        module = importlib.import_module(module_path)
-    except ImportError as exc:
-        click.echo(f"Cannot import module '{module_path}': {exc}", err=True)
-        sys.exit(1)
-    try:
-        return getattr(module, attr_name)
-    except AttributeError:
-        click.echo(f"Module '{module_path}' has no attribute '{attr_name}'", err=True)
-        sys.exit(1)
+    config = _compose_config(list(ctx.args))
+    _apply_task_options(config, task_prompt, task_prompt_file, model_path)
+    records = manage_iterations(config, repo_root=_repo_root())
+    click.echo(f"iterations: {len(records)}")
+    click.echo(f"output: {config.history.output_dir}")
+
+
+def _compose_config(overrides: list[str]) -> DictConfig:
+    config_dir = _repo_root() / "configs"
+    with initialize_config_dir(version_base=None, config_dir=str(config_dir)):
+        return compose(config_name="prompt_task", overrides=overrides)
+
+
+def _apply_task_options(
+    config: DictConfig,
+    task_prompt: str | None,
+    task_prompt_file: Path | None,
+    model_path: Path | None,
+) -> None:
+    if task_prompt_file is not None:
+        config.task.prompt = task_prompt_file.read_text()
+        config.task.prompt_file = str(task_prompt_file)
+    elif task_prompt is not None:
+        config.task.prompt = task_prompt
+    if model_path is not None:
+        config.task.model_path = str(model_path)
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]

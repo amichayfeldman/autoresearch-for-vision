@@ -15,6 +15,7 @@ editable_paths:
   - configs/scheduler/
   - configs/trainer/
   - configs/examples/
+  - /home/afeldman/projects/trigo_ultralytics/ultralytics/
 forbidden_paths:
   - src/cv_autoresearch/engine/manager/
   - src/cv_autoresearch/engine/history/

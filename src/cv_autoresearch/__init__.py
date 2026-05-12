@@ -1,14 +1,5 @@
-"""cv-autoresearch package."""
+"""Agent-managed computer-vision autoresearch."""
 
-from cv_autoresearch.task import TaskDef
+from cv_autoresearch.engine.manager import IterationManager, manage_iterations
 
-__all__ = ["TaskDef", "run"]
-
-
-def __getattr__(name: str):
-    """Keep legacy ``cv_autoresearch.run`` available without eager search imports."""
-    if name == "run":
-        from cv_autoresearch.autoresearch import run
-
-        return run
-    raise AttributeError(name)
+__all__ = ["IterationManager", "manage_iterations"]
