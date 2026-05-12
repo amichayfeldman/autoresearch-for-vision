@@ -340,7 +340,7 @@ def validate_paths(config: YoloPoseRunConfig) -> None:
 def default_branch_name(run_name: str) -> str:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     safe_run_name = re.sub(r"[^A-Za-z0-9._-]+", "-", run_name).strip("-").lower() or "run"
-    return f"insighture/yolo-pose-{timestamp}-{safe_run_name}"
+    return f"autoresearch-for-vision/yolo-pose-{timestamp}-{safe_run_name}"
 
 
 def create_ultralytics_branch(repo: Path, branch_name: str, *, allow_dirty: bool) -> None:

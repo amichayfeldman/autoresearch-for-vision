@@ -93,13 +93,13 @@ from hydra import compose, initialize_config_dir
 
 from cv_autoresearch import manage_iterations
 
-with initialize_config_dir(version_base=None, config_dir="/path/to/Insighture/configs"):
+with initialize_config_dir(version_base=None, config_dir="/path/to/autoresearch-for-vision/configs"):
     config = compose(
         config_name="prompt_task",
         overrides=["iteration.max_iterations=3"],
     )
 
-records = manage_iterations(config, repo_root="/path/to/Insighture")
+records = manage_iterations(config, repo_root="/path/to/autoresearch-for-vision")
 ```
 
 ## Edit Boundaries
