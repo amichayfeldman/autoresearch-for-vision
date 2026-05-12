@@ -22,7 +22,7 @@ from typing import Any
 import pyrootutils
 
 
-DEFAULT_ULTRALYTICS_REPO = Path("/home/afeldman/projects/trigo_ultralytics")
+DEFAULT_ULTRALYTICS_REPO = Path("/home/afeldman/projects/ultralytics")
 DEFAULT_OUTPUT_DIR = Path("outputs/yolo_pose")
 MAX_YOLO_EPOCHS = 5
 MIN_YOLO_BATCH = 64
@@ -83,7 +83,7 @@ def parse_args() -> YoloPoseRunConfig:
         "--ultralytics-repo",
         type=Path,
         default=DEFAULT_ULTRALYTICS_REPO,
-        help="Path to the local Trigo Ultralytics repository.",
+        help="Path to the local Ultralytics repository.",
     )
     parser.add_argument(
         "--output-dir",
@@ -164,7 +164,7 @@ def run(config: YoloPoseRunConfig) -> dict[str, Any]:
     )
 
     disable_clearml_logging()
-    yolo_cls = load_trigo_yolo(config.ultralytics_repo.resolve())
+    yolo_cls = load_ultralytics_yolo(config.ultralytics_repo.resolve())
 
     pretrain_metrics = run_pretrain_validation(config, yolo_cls, output_dir)
     model = yolo_cls(config.model, task="pose")
@@ -255,7 +255,7 @@ def disable_clearml_logging() -> None:
     os.environ.setdefault("TRAINS_OFFLINE_MODE", "1")
 
 
-def load_trigo_yolo(repo: Path) -> Any:
+def load_ultralytics_yolo(repo: Path) -> Any:
     pyrootutils.setup_root(
         search_from=repo / "ultralytics",
         indicator=".git",
