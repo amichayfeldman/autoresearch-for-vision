@@ -1,5 +1,0 @@
-name: prompt_task
-description: Prompt-first user-defined computer-vision task.
-prompt: ""
-prompt_file: null
-model_path: null

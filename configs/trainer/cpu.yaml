@@ -1,6 +1,0 @@
-accelerator: cpu
-devices: 1
-deterministic: true
-enable_progress_bar: false
-limit_train_batches: 1.0
-limit_val_batches: 1.0

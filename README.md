@@ -1,141 +1,79 @@
 # cv-autoresearch
 
-Agent-managed computer-vision experimentation.
+Karpathy-style autoresearch adapted to computer vision.
 
-`cv-autoresearch` runs a baseline, gives an external agent the latest metrics and
-bounded edit surface, lets the agent make exactly one intended training change,
-then trains and promotes the result only when the primary metric improves.
-
-There is no Optuna loop and no explore/exploit mode. The agent owns the next
-iteration decision: it may change a config value, a training hyperparameter, data
-handling, evaluation code, or task wiring, as long as the changed files are in
-the configured editable path list.
-
-## How It Works
+There is no manager package, Hydra config tree, hidden CLI, or internal agent
+orchestrator. The workflow is intentionally small:
 
 ```text
-task prompt + optional model path
+human edits program.md
         |
         v
-task-wiring agent edits allowed wiring/evaluation files
+human opens Codex/Claude/Cursor in this repo
         |
         v
-pre-train verification checks precision and recall are available
+agent follows program.md and edits train.py
         |
         v
-baseline training run
-        |
-        v
-for each iteration:
-  agent receives history, metrics, baseline, editable paths, forbidden paths
-  agent makes one intended change in allowed files
-  manager rejects forbidden or unrelated changes
-  training runs with the changed code/config
-  result is promoted only if the primary metric improves
+python train.py writes metrics and artifacts
 ```
 
-## Requirements
+## Files
 
-- Python 3.10+
-- PyTorch 2.0+
-- Claude CLI or another configured agent command
+```text
+program.md  The human-readable research protocol and task spec.
+train.py    The complete CV setup, training, evaluation, and logging surface.
+agents/     Optional prompt files for coding agents. Not runtime code.
+skills/     Optional setup skills for CV task and metric wiring. Not runtime code.
+tests/      Small contract tests for the Markdown protocol and train script.
+```
 
-The default agent command is configured in `configs/agent/default.yaml`.
-
-## Installation
+## Install
 
 ```bash
 pip install -e .
 ```
 
-For development:
+## Run
 
 ```bash
-pip install -e ".[dev]"
+python train.py
 ```
 
-## Repository Layout
+The default task is a tiny deterministic CV fallback: classify whether an image
+contains a bright square. During Phase 1, the agent replaces the dataset/model or
+feature hooks in `train.py` for the real CV task. After precision and recall are
+numeric, normal research iterations keep editing `train.py` one lever at a time.
 
-```text
-src/cv_autoresearch/engine/  Current agent-managed training engine
-configs/                     Hydra configs for data, model, training, agent, history
-agents/skills/               Agent instructions and edit-boundary definitions
-tests/                       Pytest suite
-examples/                    Notes for running example configs
-```
+`train.py` is intentionally built on the usual CV research stack: PyTorch
+Lightning owns the training loop, Albumentations owns image augmentation, and the
+model hook assumes the real task will usually import a preconfigured model or
+load a checkpoint from a library.
 
-## Quick Start
+When the model comes from an installed Python package, `train.py` can import the
+model class or factory directly through `MODEL_IMPORT`. When the model and
+training code live in another repo, `train.py` should become a thin adapter
+around that repo: add the external checkout to the import path, instantiate the
+model, and either wrap it in Lightning or set `TRAINING_BACKEND = "external"` to
+call the source repo's own training and prediction entrypoints. Metrics still
+flow back through this repo as numeric precision and recall.
 
-Run the managed iteration loop with the default prompt-task config:
+During Phase 1, the human may point the coding agent at
+`agents/cv-wiring-agent.md` and the setup skills under `skills/`. These files are
+plain prompt guidance for bridging the user task definition to concrete CV
+inputs, outputs, and metric calculation. They may instruct the agent to search
+the internet for task-specific metric conventions, dataset schemas, or model
+output formats, but they do not invoke agents or run orchestration themselves.
+
+Outputs are written under `outputs/baseline/` by default:
+
+- `pretrain_metrics.json`
+- `metrics.json`
+- `run.json`
+- `checkpoint.json`
+
+## Develop
 
 ```bash
-cv-autoresearch run \
-  --task-prompt "Classify images and improve macro F1." \
-  iteration.max_iterations=3
-```
-
-Use a prompt file when the task description is longer:
-
-```bash
-cv-autoresearch run \
-  --task-prompt-file ./task.md \
-  --model-path ./model.pt \
-  iteration.max_iterations=5 \
-  history.output_dir=outputs/my_run
-```
-
-Trailing arguments are passed through as Hydra overrides.
-
-You can also call the engine directly:
-
-```python
-from hydra import compose, initialize_config_dir
-
-from cv_autoresearch import manage_iterations
-
-with initialize_config_dir(version_base=None, config_dir="/path/to/autoresearch-for-vision/configs"):
-    config = compose(
-        config_name="prompt_task",
-        overrides=["iteration.max_iterations=3"],
-    )
-
-records = manage_iterations(config, repo_root="/path/to/autoresearch-for-vision")
-```
-
-## Edit Boundaries
-
-Allowed and forbidden paths are part of the agent config:
-
-```yaml
-agent:
-  editable_paths:
-    - src/cv_autoresearch/engine/training/
-    - src/cv_autoresearch/engine/data/
-    - src/cv_autoresearch/engine/models/
-    - src/cv_autoresearch/engine/losses/
-    - src/cv_autoresearch/engine/evaluation/
-    - src/cv_autoresearch/engine/task_wiring/
-    - configs/model/
-    - configs/data/
-    - configs/evaluation/
-    - configs/augmentations/
-    - configs/optimizer/
-    - configs/scheduler/
-    - configs/trainer/
-  forbidden_paths:
-    - src/cv_autoresearch/engine/manager/
-    - src/cv_autoresearch/engine/history/
-    - agents/skills/
-    - tests/
-```
-
-The manager records each iteration under `history.output_dir`, including the
-changed files, patch, metrics, checkpoint path, promotion status, and summary.
-
-## Useful Commands
-
-```bash
-pytest
-cv-autoresearch-train iteration.max_epochs=1
-cv-autoresearch-iterations iteration.max_iterations=3
+python -m unittest discover -s tests
 ```
